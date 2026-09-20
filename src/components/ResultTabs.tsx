@@ -11,6 +11,7 @@ import {
   Layers,
   Sparkles,
   Bookmark,
+  FileDown,
 } from 'lucide-react';
 import { Conversation, QualityMetrics } from '../types';
 import { ExportService } from '../services/ExportService';
@@ -59,6 +60,26 @@ export const ResultTabs: React.FC<ResultTabsProps> = ({
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDownloadPdf = () => {
+    if (activeTab === 'paragraph' && conversation.currentParagraph) {
+      ExportService.downloadSingleTextPdf(conversation.title, conversation.currentParagraph, 'Paragraph');
+    } else if (activeTab === 'original') {
+      ExportService.downloadSingleTextPdf(conversation.title, conversation.originalText, 'Document');
+    } else {
+      ExportService.downloadPdf(
+        conversation.title,
+        conversation.currentSummary,
+        conversation.currentParagraph,
+        {
+          sourceWords: origStats.words,
+          summaryWords: sumStats.words,
+          compressionRatio: comp.ratio,
+          mode: conversation.settings.mode,
+        }
+      );
     }
   };
 
@@ -173,10 +194,21 @@ export const ResultTabs: React.FC<ResultTabsProps> = ({
           </button>
 
           <button
+            id="btn-download-pdf"
+            type="button"
+            onClick={handleDownloadPdf}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200/70 dark:border-rose-800/40 transition-colors cursor-pointer"
+            title="Download formatted PDF (.pdf)"
+          >
+            <FileDown className="w-3.5 h-3.5 text-rose-500" />
+            <span>PDF</span>
+          </button>
+
+          <button
             id="btn-download-txt"
             type="button"
             onClick={handleDownloadTxt}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             title="Download as .TXT"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />

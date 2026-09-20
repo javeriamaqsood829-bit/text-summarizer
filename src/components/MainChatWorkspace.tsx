@@ -21,12 +21,24 @@ import {
   Moon,
   Sun,
   Sunset,
+  Lock,
+  LogIn,
+  FileCode,
+  Image as ImageIcon,
+  FileCheck,
+  FileType,
+  Loader2,
+  X,
+  FileDown,
+  UploadCloud,
 } from 'lucide-react';
 import { IridescentOrb } from './IridescentOrb';
 import { Conversation, SummarySettings, TextStatistics, SummaryMode } from '../types';
 import { formatNumber } from '../utils/formatting';
 import { SAMPLE_LONG_DOCUMENT, SAMPLE_LONG_DOCUMENT_TITLE } from '../data/sampleDocument';
 import { SummaryModeDropdown } from './SummaryModeDropdown';
+import { FileExtractorService, ExtractedFileResult } from '../services/FileExtractorService';
+import { ExportService } from '../services/ExportService';
 
 interface MainChatWorkspaceProps {
   inputText: string;
@@ -43,6 +55,11 @@ interface MainChatWorkspaceProps {
     operation: 'shorter' | 'detailed' | 'simpler' | 'key_points' | 'terms' | 'executive',
     label: string
   ) => void;
+  guestUsageCount?: number;
+  guestLimit?: number;
+  isGuestLimitReached?: boolean;
+  isAuthenticated?: boolean;
+  onOpenAuth?: (mode?: 'login' | 'register') => void;
 }
 
 export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
@@ -57,6 +74,11 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   isProcessing,
   activeConversation,
   onFollowUp,
+  guestUsageCount = 0,
+  guestLimit = 10,
+  isGuestLimitReached = false,
+  isAuthenticated = false,
+  onOpenAuth,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -64,6 +86,14 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
+
+  // Multi-file extraction & parsing state (PDF, Image OCR, Code, Text)
+  const [isExtractingFile, setIsExtractingFile] = useState(false);
+  const [extractStatus, setExtractStatus] = useState('');
+  const [extractProgress, setExtractProgress] = useState(0);
+  const [extractedFile, setExtractedFile] = useState<ExtractedFileResult | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
 
   // Chatbot identity greeting based on time of day - ALWAYS Javeria as requested
   const getGreetingData = () => {
@@ -73,7 +103,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
       return {
         title: 'Good Morning, Javeria.',
         period: 'Morning',
-        badge: 'Morning Session',
+        badge: 'Morning',
         icon: 'sun',
       };
     }
@@ -81,7 +111,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
       return {
         title: 'Good Afternoon, Javeria.',
         period: 'Afternoon',
-        badge: 'Afternoon Session',
+        badge: 'Afternoon',
         icon: 'sun',
       };
     }
@@ -89,7 +119,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
       return {
         title: 'Good Evening, Javeria.',
         period: 'Evening',
-        badge: 'Evening Session',
+        badge: 'Evening',
         icon: 'sunset',
       };
     }
@@ -97,7 +127,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
     return {
       title: 'Good Night, Javeria.',
       period: 'Night',
-      badge: 'Night Session',
+      badge: 'Night',
       icon: 'moon',
     };
   };
@@ -121,23 +151,81 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
     }
   }, [inputText]);
 
-  const handleFileUpload = (file: File) => {
+  const handleFileUpload = async (file: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (content) {
-        onInputChange(content);
-      }
-    };
-    reader.readAsText(file);
+    setIsExtractingFile(true);
+    setExtractProgress(15);
+    setExtractStatus(`Extracting ${file.name}...`);
+    try {
+      const result = await FileExtractorService.extractFile(file, (status, pct) => {
+        setExtractStatus(status);
+        setExtractProgress(pct);
+      });
+      onInputChange(result.content);
+      setExtractedFile(result);
+      setExtractStatus(`Loaded ${result.fileName}`);
+    } catch (err: any) {
+      alert(err.message || 'Could not extract text from this file.');
+    } finally {
+      setIsExtractingFile(false);
+    }
   };
 
   const handleCopy = (text: string) => {
     if (!text) return;
-    navigator.clipboard.writeText(text);
+    ExportService.copyToClipboard(text);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleDownloadPdf = () => {
+    if (!activeConversation) return;
+    const title = activeConversation.title || 'Javeria_AI_Document';
+    if (activeTab === 'paragraph' && activeConversation.currentParagraph) {
+      ExportService.downloadSingleTextPdf(title, activeConversation.currentParagraph, 'Paragraph');
+    } else if (activeTab === 'summary' && activeConversation.currentSummary) {
+      ExportService.downloadPdf(
+        title,
+        activeConversation.currentSummary,
+        activeConversation.currentParagraph,
+        {
+          mode: activeConversation.settings.mode,
+        }
+      );
+    } else {
+      ExportService.downloadSingleTextPdf(title, activeConversation.originalText, 'Document');
+    }
+    setDownloadNotice('PDF downloaded successfully!');
+    setTimeout(() => setDownloadNotice(null), 2500);
+  };
+
+  const handleDownloadTxt = () => {
+    if (!activeConversation) return;
+    const title = activeConversation.title || 'Javeria_AI_Document';
+    const content =
+      activeTab === 'paragraph' && activeConversation.currentParagraph
+        ? activeConversation.currentParagraph
+        : activeTab === 'original'
+        ? activeConversation.originalText
+        : activeConversation.currentSummary;
+    ExportService.downloadTxt(title, content, activeTab);
+    setDownloadNotice('TXT file downloaded successfully!');
+    setTimeout(() => setDownloadNotice(null), 2500);
+  };
+
+  const handleDownloadMarkdown = () => {
+    if (!activeConversation) return;
+    const title = activeConversation.title || 'Javeria_AI_Document';
+    ExportService.downloadMarkdown(
+      title,
+      activeConversation.currentSummary,
+      activeConversation.currentParagraph,
+      {
+        mode: activeConversation.settings.mode,
+      }
+    );
+    setDownloadNotice('Markdown file downloaded successfully!');
+    setTimeout(() => setDownloadNotice(null), 2500);
   };
 
   const handleSpeechToggle = () => {
@@ -152,6 +240,10 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (isGuestLimitReached) {
+        onOpenAuth?.('register');
+        return;
+      }
       if (inputText.trim() && !isProcessing) {
         onSummarize();
       }
@@ -163,11 +255,11 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
 
   return (
     <div className="flex-1 flex flex-col justify-between max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-10">
-      {/* Hidden file input */}
+      {/* Hidden file input supporting PDF, Images/OCR, Code, and Text */}
       <input
         ref={fileInputRef}
         type="file"
-        accept=".txt,.md,.text,.markdown,.json,.csv"
+        accept=".pdf,.txt,.md,.text,.rtf,.log,.json,.csv,.tsv,.xml,.yaml,.yml,.js,.ts,.tsx,.jsx,.py,.java,.cpp,.c,.cs,.php,.rb,.go,.rs,.swift,.kt,.html,.css,.sql,.sh,.png,.jpg,.jpeg,.webp,.bmp,image/*,application/pdf"
         onChange={(e) => {
           if (e.target.files && e.target.files[0]) {
             handleFileUpload(e.target.files[0]);
@@ -185,7 +277,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
 
             {/* Greeting Typography matching user request: Javeria with dynamic time of day */}
             <div className="space-y-2.5">
-              {/* Dynamic Period Badge */}
+              {/* Dynamic Period & Time Badge (without "Session") */}
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-200/70 dark:bg-white/5 border border-slate-300/50 dark:border-white/10 text-[11px] font-medium text-slate-700 dark:text-slate-300 shadow-xs">
                 {greetingData.icon === 'moon' ? (
                   <Moon className="w-3.5 h-3.5 text-indigo-400 fill-indigo-400/20" />
@@ -476,8 +568,9 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                   </button>
                 </div>
 
-                {/* Copy / Export */}
-                <div className="flex items-center gap-1.5">
+                {/* Download, Export & Copy Action Buttons */}
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  {/* Copy Button */}
                   <button
                     type="button"
                     onClick={() => {
@@ -487,23 +580,64 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                           : activeConversation?.currentSummary || '';
                       handleCopy(textToCopy);
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
-                    title="Copy content"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 transition-all active:scale-95 cursor-pointer shadow-xs"
+                    title="Copy content to clipboard"
                   >
                     {isCopied ? (
                       <>
                         <Check className="w-3.5 h-3.5 text-emerald-500" />
-                        <span className="text-emerald-500">Copied</span>
+                        <span className="text-emerald-500 font-bold">Copied!</span>
                       </>
                     ) : (
                       <>
-                        <Copy className="w-3.5 h-3.5" />
+                        <Copy className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                         <span>Copy {activeTab === 'paragraph' ? 'Paragraph' : 'Summary'}</span>
                       </>
                     )}
                   </button>
+
+                  {/* Download PDF Button */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadPdf}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 border border-rose-200/70 dark:border-rose-800/40 transition-all active:scale-95 cursor-pointer shadow-xs"
+                    title="Download document as formatted PDF (.pdf)"
+                  >
+                    <FileDown className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Download PDF</span>
+                  </button>
+
+                  {/* Download TXT Button */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadTxt}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/5 transition-all active:scale-95 cursor-pointer shadow-xs"
+                    title="Download document as plain text (.txt)"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                    <span>Download TXT</span>
+                  </button>
+
+                  {/* Download Markdown Button */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadMarkdown}
+                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                    title="Download formatted Markdown (.md)"
+                  >
+                    <FileCode className="w-3.5 h-3.5" />
+                    <span>MD</span>
+                  </button>
                 </div>
               </div>
+
+              {/* Download notification banner */}
+              {downloadNotice && (
+                <div className="mt-2.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-[12px] text-emerald-700 dark:text-emerald-300 flex items-center gap-2 animate-in fade-in">
+                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span>{downloadNotice}</span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -511,11 +645,122 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
 
       {/* BOTTOM SECTION: Prompt Box & 3 Suggestion Cards (Exact Layout as Sample Image) */}
       <div className="space-y-4 pt-6">
-        {/* Sleek Prompt Card */}
+        {/* Guest Limit Reached Warning Banner */}
+        {!isAuthenticated && isGuestLimitReached && (
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-sm animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-white text-xs sm:text-sm">
+                  Free Limit Reached ({guestLimit}/{guestLimit} Uses)
+                </p>
+                <p className="text-slate-600 dark:text-slate-300 text-[11px] sm:text-xs">
+                  Aap 10 martaba summarize/convert use kar chukay hain. Mazeed use karne ke liye please account banayein ya login karein.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenAuth?.('register')}
+              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-all shrink-0 cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Sign In / Register</span>
+            </button>
+          </div>
+        )}
+
+        {/* Guest Usage Progress Indicator (when not yet reached 10) */}
+        {!isAuthenticated && !isGuestLimitReached && (
+          <div className="flex items-center justify-between text-xs px-1 text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-1.5 font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+              <span>Free Guest Mode:</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                {guestLimit - guestUsageCount} of {guestLimit} free uses remaining
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenAuth?.('login')}
+              className="text-blue-600 dark:text-blue-400 hover:underline font-medium cursor-pointer"
+            >
+              Sign In for Unlimited
+            </button>
+          </div>
+        )}
+
+        {/* Sleek Prompt Card with Drag & Drop */}
         <div
           id="prompt-input-box"
-          className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-slate-200 dark:border-white/10 shadow-lg p-3 sm:p-4 transition-all focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/20"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingFile(true);
+          }}
+          onDragLeave={() => setIsDraggingFile(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDraggingFile(false);
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+              handleFileUpload(e.dataTransfer.files[0]);
+            }
+          }}
+          className={`w-full rounded-2xl bg-white dark:bg-[#121620] border transition-all p-3 sm:p-4 shadow-lg focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/20 ${
+            isDraggingFile
+              ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-50/40 dark:bg-blue-950/20'
+              : 'border-slate-200 dark:border-white/10'
+          }`}
         >
+          {/* File Extraction Progress Status */}
+          {isExtractingFile && (
+            <div className="flex items-center gap-3 p-3 mb-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/50 text-xs text-blue-700 dark:text-blue-300 animate-pulse">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold truncate">{extractStatus}</div>
+                <div className="w-full bg-blue-200 dark:bg-blue-900/60 h-1.5 rounded-full mt-1 overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-full rounded-full transition-all duration-300"
+                    style={{ width: `${extractProgress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Extracted File Badge */}
+          {extractedFile && !isExtractingFile && (
+            <div className="flex items-center justify-between gap-2 p-2 px-3 mb-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-700 dark:text-slate-200 font-medium">
+              <div className="flex items-center gap-2 truncate">
+                {extractedFile.fileType === 'pdf' ? (
+                  <FileDown className="w-4 h-4 text-rose-500 shrink-0" />
+                ) : extractedFile.fileType === 'image' ? (
+                  <ImageIcon className="w-4 h-4 text-purple-500 shrink-0" />
+                ) : extractedFile.fileType === 'code' ? (
+                  <FileCode className="w-4 h-4 text-amber-500 shrink-0" />
+                ) : (
+                  <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                )}
+                <span className="truncate font-semibold">{extractedFile.fileName}</span>
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0">
+                  ({formatNumber(extractedFile.wordCount)} words extracted)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setExtractedFile(null);
+                  onInputChange('');
+                }}
+                className="p-1 hover:text-rose-500 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                title="Remove attached file"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Live text statistics when typing */}
           {inputText.length > 0 && (
             <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 px-1 pb-2 border-b border-slate-100 dark:border-white/5 mb-2 font-mono">
@@ -525,7 +770,10 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               </span>
               <button
                 type="button"
-                onClick={() => onInputChange('')}
+                onClick={() => {
+                  onInputChange('');
+                  setExtractedFile(null);
+                }}
                 className="hover:text-rose-500 transition-colors"
               >
                 Clear
@@ -540,7 +788,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isProcessing}
-            placeholder="Message Javeria AI... (Paste 500+ lines or type any document to summarize or convert into paragraphs)"
+            placeholder="Message Javeria AI... (Upload or paste PDF, TXT, Code, Image, or 500+ lines to summarize or convert into paragraphs)"
             rows={2}
             className="w-full bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm sm:text-base resize-none focus:outline-none scrollbar-thin max-h-60"
           />
@@ -554,8 +802,8 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isProcessing}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
-                title="Upload document (.txt, .md, .csv, .json)"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                title="Upload file (PDF, TXT, Code, Picture/Image OCR, Docs, CSV)"
               >
                 <Paperclip className="w-4 h-4" />
               </button>
@@ -563,11 +811,17 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               {/* Dedicated "Summarize" Button (Instant clear summary trigger) */}
               <button
                 type="button"
-                onClick={() => onSummarize()}
+                onClick={() => {
+                  if (isGuestLimitReached) {
+                    onOpenAuth?.('register');
+                    return;
+                  }
+                  onSummarize();
+                }}
                 disabled={!inputText.trim() || isProcessing}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   inputText.trim() && !isProcessing
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer'
                     : 'bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 cursor-not-allowed'
                 }`}
                 title="Summarize document into concise bullet points"
@@ -580,13 +834,17 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  if (isGuestLimitReached) {
+                    onOpenAuth?.('register');
+                    return;
+                  }
                   onConvertToParagraph();
                   setActiveTab('paragraph');
                 }}
                 disabled={(!inputText.trim() && !hasSummary) || isProcessing}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   (inputText.trim() || hasSummary) && !isProcessing
-                    ? 'bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-300/40 dark:border-indigo-500/30 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600'
+                    ? 'bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-300/40 dark:border-indigo-500/30 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 cursor-pointer'
                     : 'bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 cursor-not-allowed'
                 }`}
                 title="Convert text or summary into continuous flowing paragraph narrative"
@@ -635,11 +893,17 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               {/* Send / Summarize Icon Button */}
               <button
                 type="button"
-                onClick={() => onSummarize()}
+                onClick={() => {
+                  if (isGuestLimitReached) {
+                    onOpenAuth?.('register');
+                    return;
+                  }
+                  onSummarize();
+                }}
                 disabled={!inputText.trim() || isProcessing}
                 className={`p-2 rounded-xl transition-all ${
                   inputText.trim() && !isProcessing
-                    ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md hover:scale-105 active:scale-95'
+                    ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md hover:scale-105 active:scale-95 cursor-pointer'
                     : 'bg-slate-200 dark:bg-white/5 text-slate-400 cursor-not-allowed'
                 }`}
                 title="Summarize (Enter)"
@@ -707,6 +971,10 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             {/* Card 1: Summarize (Bullet Points) */}
             <div
               onClick={() => {
+                if (isGuestLimitReached) {
+                  onOpenAuth?.('register');
+                  return;
+                }
                 onUpdateSettings({ mode: 'key_points' });
                 onLoadSample();
               }}
@@ -726,6 +994,10 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             {/* Card 2: Convert to Paragraph Flow */}
             <div
               onClick={() => {
+                if (isGuestLimitReached) {
+                  onOpenAuth?.('register');
+                  return;
+                }
                 onUpdateSettings({ mode: 'balanced', paragraphCount: '2' });
                 onLoadSample();
               }}
@@ -745,6 +1017,10 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             {/* Card 3: Executive Analytics Brief */}
             <div
               onClick={() => {
+                if (isGuestLimitReached) {
+                  onOpenAuth?.('register');
+                  return;
+                }
                 onUpdateSettings({ mode: 'executive' });
                 onLoadSample();
               }}

@@ -10,6 +10,7 @@ import { useTheme } from './hooks/useTheme';
 import { useLocalModel } from './hooks/useLocalModel';
 import { useHistory } from './hooks/useHistory';
 import { useSummarizer } from './hooks/useSummarizer';
+import { useAuth } from './hooks/useAuth';
 import { SummarySettings, SummaryMode, Conversation } from './types';
 import { calculateTextStatistics } from './utils/textStatistics';
 import { validateInputText } from './utils/validation';
@@ -63,9 +64,32 @@ export default function App() {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const {
+    currentUser,
+    isAuthenticated,
+    guestUsageCount,
+    guestLimit,
+    isGuestLimitReached,
+    recordGuestUse,
+  } = useAuth();
+
   const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
     setAuthModalMode(mode);
     setAuthModalOpen(true);
+  };
+
+  const checkGuestUsageAllowed = (): boolean => {
+    if (currentUser) {
+      return true;
+    }
+    if (isGuestLimitReached) {
+      setValidationError(
+        `Free limit reached (${guestLimit}/${guestLimit} uses). Please Sign In or Register to continue using Javeria AI.`
+      );
+      handleOpenAuth('register');
+      return false;
+    }
+    return true;
   };
 
   // Live text statistics
@@ -140,10 +164,18 @@ export default function App() {
 
   const handleSummarize = async () => {
     setValidationError(null);
+    if (!checkGuestUsageAllowed()) {
+      return;
+    }
+
     const validation = validateInputText(inputText);
     if (!validation.isValid) {
       setValidationError(validation.error || 'Please enter text to summarize.');
       return;
+    }
+
+    if (!currentUser) {
+      recordGuestUse();
     }
 
     let targetConv = activeConversation;
@@ -160,10 +192,17 @@ export default function App() {
 
   const handleConvertToParagraph = async (customParagraphCount?: '1' | '2' | '3' | 'natural') => {
     setValidationError(null);
+    if (!checkGuestUsageAllowed()) {
+      return;
+    }
+
     const targetCount = customParagraphCount || settings.paragraphCount;
 
     // 1. If summary already exists in active conversation, convert it directly
     if (activeConversation?.currentSummary) {
+      if (!currentUser) {
+        recordGuestUse();
+      }
       await convertToParagraph(
         activeConversation.currentSummary,
         targetCount,
@@ -181,6 +220,10 @@ export default function App() {
       if (!validation.isValid) {
         setValidationError(validation.error || 'Please enter text to summarize into paragraphs.');
         return;
+      }
+
+      if (!currentUser) {
+        recordGuestUse();
       }
 
       let targetConv = activeConversation;
@@ -214,6 +257,12 @@ export default function App() {
     label: string
   ) => {
     if (!activeConversation) return;
+    if (!checkGuestUsageAllowed()) {
+      return;
+    }
+    if (!currentUser) {
+      recordGuestUse();
+    }
     await executeFollowUp(operation, label, activeConversation, (updated) => {
       saveActiveConversation(updated);
     });
@@ -307,6 +356,11 @@ export default function App() {
             isProcessing={isProcessing}
             activeConversation={activeConversation}
             onFollowUp={handleFollowUp}
+            guestUsageCount={guestUsageCount}
+            guestLimit={guestLimit}
+            isGuestLimitReached={isGuestLimitReached}
+            isAuthenticated={isAuthenticated}
+            onOpenAuth={handleOpenAuth}
           />
         </main>
       </div>

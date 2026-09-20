@@ -10,10 +10,13 @@ import {
   Layers,
   FileCheck,
   CheckCircle2,
+  Loader2,
+  FileDown,
 } from 'lucide-react';
 import { TextStatistics } from '../types';
 import { formatNumber } from '../utils/formatting';
 import { SAMPLE_LONG_DOCUMENT } from '../data/sampleDocument';
+import { FileExtractorService } from '../services/FileExtractorService';
 
 interface TextInputAreaProps {
   value: string;
@@ -35,17 +38,23 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [copiedNotification, setCopiedNotification] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractStatus, setExtractStatus] = useState('');
 
-  const handleFileUpload = (file: File) => {
+  const handleFileUpload = async (file: File) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      if (content) {
-        onChange(content);
-      }
-    };
-    reader.readAsText(file);
+    setIsExtracting(true);
+    setExtractStatus(`Extracting ${file.name}...`);
+    try {
+      const result = await FileExtractorService.extractFile(file, (status) => {
+        setExtractStatus(status);
+      });
+      onChange(result.content);
+    } catch (err: any) {
+      alert(err.message || 'Failed to extract text from file.');
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -134,12 +143,20 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
             : ''
         }`}
       >
+        {/* File Extraction Progress Overlay */}
+        {isExtracting && (
+          <div className="flex items-center gap-3 p-3 m-3 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/50 text-xs text-blue-700 dark:text-blue-300 animate-pulse">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="font-semibold">{extractStatus}</span>
+          </div>
+        )}
+
         <textarea
           id="textarea-input-text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          placeholder="Paste your text here (500+ lines, research papers, reports, notes, assignments, documentation)... or drop a TXT/Markdown file."
+          disabled={disabled || isExtracting}
+          placeholder="Paste your text here (500+ lines, research papers, reports, notes, assignments, documentation)... or drop/upload a PDF, TXT, Code, or Image file."
           rows={11}
           className="w-full p-4 sm:p-5 bg-transparent text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm sm:text-base leading-relaxed resize-y focus:outline-none scrollbar-thin"
         />
@@ -149,7 +166,7 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-blue-500/10 dark:bg-blue-500/20 backdrop-blur-xs pointer-events-none">
             <Upload className="w-10 h-10 text-blue-600 dark:text-blue-400 mb-2 animate-bounce" />
             <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-              Drop text or markdown document here
+              Drop PDF, text, code, or image file here
             </p>
           </div>
         )}
@@ -175,7 +192,7 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.md,.text,.markdown,.json,.csv"
+            accept=".pdf,.txt,.md,.text,.rtf,.log,.json,.csv,.tsv,.xml,.yaml,.yml,.js,.ts,.tsx,.jsx,.py,.java,.cpp,.c,.cs,.php,.rb,.go,.rs,.swift,.kt,.html,.css,.sql,.sh,.png,.jpg,.jpeg,.webp,.bmp,image/*,application/pdf"
             onChange={(e) => {
               if (e.target.files && e.target.files[0]) {
                 handleFileUpload(e.target.files[0]);
@@ -187,12 +204,16 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
             id="btn-upload-file"
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={disabled}
+            disabled={disabled || isExtracting}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
-            title="Upload local .txt or .md file"
+            title="Upload PDF, TXT, Code, Image (OCR), or Document"
           >
-            <Upload className="w-3.5 h-3.5 text-slate-500" />
-            <span>Upload File</span>
+            {isExtracting ? (
+              <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+            ) : (
+              <Upload className="w-3.5 h-3.5 text-slate-500" />
+            )}
+            <span>Upload File (PDF / TXT / Code / Image)</span>
           </button>
 
           {/* Paste Button */}

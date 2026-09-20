@@ -1,0 +1,6 @@
+{
+  "name": "LocalSummarize AI",
+  "description": "Javeria AI: Private, intelligent long-text summarization and assistant for 500+ lines of text, documents, and research without API keys.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -471,6 +471,7 @@ export default function App() {
               isProcessing={isProcessing}
               activeConversation={activeConversation}
               onFollowUp={handleFollowUp}
+              currentUser={currentUser}
               guestUsageCount={guestUsageCount}
               guestLimit={guestLimit}
               isGuestLimitReached={isGuestLimitReached}

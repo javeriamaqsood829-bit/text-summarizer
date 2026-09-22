@@ -383,7 +383,7 @@ function getGeminiClient(): GoogleGenAI | null {
 async function callGemini(contents: string): Promise<string | null> {
   const ai = getGeminiClient();
   if (!ai) return null;
-  const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
   for (const model of modelsToTry) {
     try {
       const resp = await ai.models.generateContent({

@@ -40,6 +40,7 @@ import { SummaryModeDropdown } from './SummaryModeDropdown';
 import { FileExtractorService, ExtractedFileResult } from '../services/FileExtractorService';
 import { ExportService } from '../services/ExportService';
 import { MarkdownViewer } from './MarkdownViewer';
+import { User } from '../types/auth';
 
 interface MainChatWorkspaceProps {
   inputText: string;
@@ -61,6 +62,7 @@ interface MainChatWorkspaceProps {
     operation: 'shorter' | 'detailed' | 'simpler' | 'key_points' | 'terms' | 'executive',
     label: string
   ) => void;
+  currentUser?: User | null;
   guestUsageCount?: number;
   guestLimit?: number;
   isGuestLimitReached?: boolean;
@@ -82,6 +84,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   isProcessing,
   activeConversation,
   onFollowUp,
+  currentUser,
   guestUsageCount = 0,
   guestLimit = 10,
   isGuestLimitReached = false,
@@ -115,13 +118,14 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   const [lastFileMeta, setLastFileMeta] = useState<{ fileName?: string; fileType?: string } | null>(null);
   const chatThreadRef = useRef<HTMLDivElement>(null);
 
-  // Chatbot identity greeting based on time of day - ALWAYS Javeria as requested
+  // Dynamic greeting based on time of day and authenticated user
   const getGreetingData = () => {
     const hour = new Date().getHours();
+    const displayName = currentUser?.name ? currentUser.name : null;
 
     if (hour >= 5 && hour < 12) {
       return {
-        title: 'Good Morning, Javeria.',
+        title: displayName ? `Good Morning, ${displayName}.` : 'Good Morning! Welcome to Javeria AI.',
         period: 'Morning',
         badge: 'Morning',
         icon: 'sun',
@@ -129,7 +133,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
     }
     if (hour >= 12 && hour < 17) {
       return {
-        title: 'Good Afternoon, Javeria.',
+        title: displayName ? `Good Afternoon, ${displayName}.` : 'Good Afternoon! Welcome to Javeria AI.',
         period: 'Afternoon',
         badge: 'Afternoon',
         icon: 'sun',
@@ -137,7 +141,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
     }
     if (hour >= 17 && hour < 21) {
       return {
-        title: 'Good Evening, Javeria.',
+        title: displayName ? `Good Evening, ${displayName}.` : 'Good Evening! Welcome to Javeria AI.',
         period: 'Evening',
         badge: 'Evening',
         icon: 'sunset',
@@ -145,7 +149,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
     }
     // Night: 21:00 (9 PM) to 04:59 (4:59 AM)
     return {
-      title: 'Good Night, Javeria.',
+      title: displayName ? `Good Night, ${displayName}.` : 'Good Night! Welcome to Javeria AI.',
       period: 'Night',
       badge: 'Night',
       icon: 'moon',
@@ -154,13 +158,18 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
 
   const [greetingData, setGreetingData] = useState(getGreetingData);
 
+  // Keep greeting updated when currentUser changes
+  useEffect(() => {
+    setGreetingData(getGreetingData());
+  }, [currentUser]);
+
   // Keep greeting updated with clock (every 15 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
       setGreetingData(getGreetingData());
     }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser]);
 
   // Auto-resize textarea
   useEffect(() => {

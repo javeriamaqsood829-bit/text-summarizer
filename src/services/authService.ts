@@ -79,6 +79,7 @@ const DEFAULT_USER: StoredUserAccount = {
 };
 
 const MANUAL_LOGIN_KEY = 'javeria_manual_login';
+const SESSION_RESET_KEY = 'javeria_auth_clean_session_v7';
 
 // Initialize default users if empty
 function initializeUsers(): StoredUserAccount[] {
@@ -101,7 +102,14 @@ export function getAllUsers(): StoredUserAccount[] {
 
 export function getCurrentUser(): User | null {
   try {
-    // One-time cleanup for any sessions that had the previous auto-login default
+    // One-time automatic reset of legacy auto-logged in session so app starts clean as Guest
+    if (localStorage.getItem(SESSION_RESET_KEY) !== 'v7') {
+      localStorage.removeItem(CURRENT_USER_KEY);
+      localStorage.removeItem(MANUAL_LOGIN_KEY);
+      localStorage.setItem(SESSION_RESET_KEY, 'v7');
+      return null;
+    }
+
     const manualFlag = localStorage.getItem(MANUAL_LOGIN_KEY);
     const raw = localStorage.getItem(CURRENT_USER_KEY);
 
@@ -109,13 +117,18 @@ export function getCurrentUser(): User | null {
       return null;
     }
 
-    // If there is an existing stored user but it was auto-seeded (no manual login flag)
+    // Only allow manual, deliberate logins
     if (!manualFlag) {
       localStorage.removeItem(CURRENT_USER_KEY);
       return null;
     }
 
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !parsed.email) {
+      return null;
+    }
+
+    return parsed;
   } catch {
     return null;
   }

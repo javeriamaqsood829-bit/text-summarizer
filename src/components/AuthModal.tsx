@@ -480,7 +480,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g. javeriamaqsood829@gmail.com"
+                    placeholder="name@example.com"
                     className="w-full text-xs pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -523,23 +523,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* Quick Preset Demo Fill */}
-              <div className="p-2.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/30 flex items-center justify-between text-[11px]">
-                <span className="text-blue-700 dark:text-blue-300">
-                  Pre-configured for Javeria Maqsood
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('javeriamaqsood829@gmail.com');
-                    setPassword('javeria123');
-                  }}
-                  className="px-2 py-0.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
-                >
-                  Auto Fill
-                </button>
-              </div>
-
               <button
                 type="submit"
                 disabled={isLoading}
@@ -579,7 +562,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Javeria Maqsood"
+                    placeholder="e.g. Your Full Name"
                     className="w-full text-xs pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -787,7 +770,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g. javeriamaqsood829@gmail.com"
+                    placeholder="name@example.com"
                     className="w-full text-xs pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>

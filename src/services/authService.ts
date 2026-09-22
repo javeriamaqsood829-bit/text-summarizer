@@ -78,6 +78,8 @@ const DEFAULT_USER: StoredUserAccount = {
   passwordHash: 'javeria123',
 };
 
+const MANUAL_LOGIN_KEY = 'javeria_manual_login';
+
 // Initialize default users if empty
 function initializeUsers(): StoredUserAccount[] {
   try {
@@ -99,31 +101,21 @@ export function getAllUsers(): StoredUserAccount[] {
 
 export function getCurrentUser(): User | null {
   try {
+    // One-time cleanup for any sessions that had the previous auto-login default
+    const manualFlag = localStorage.getItem(MANUAL_LOGIN_KEY);
     const raw = localStorage.getItem(CURRENT_USER_KEY);
-    
-    // Explicitly signed out by the user
-    if (raw === 'LOGGED_OUT' || raw === 'null') {
+
+    if (!raw || raw === 'LOGGED_OUT' || raw === 'null') {
       return null;
     }
 
-    // Has active user in storage
-    if (raw) {
-      return JSON.parse(raw);
-    }
-
-    // If never initialized before, initialize with default user once
-    const alreadyInitialized = localStorage.getItem(AUTH_INITIALIZED_KEY);
-    if (alreadyInitialized) {
+    // If there is an existing stored user but it was auto-seeded (no manual login flag)
+    if (!manualFlag) {
+      localStorage.removeItem(CURRENT_USER_KEY);
       return null;
     }
 
-    // First session bootstrap
-    localStorage.setItem(AUTH_INITIALIZED_KEY, 'true');
-    const initialUsers = initializeUsers();
-    const defaultUser = initialUsers[0] || DEFAULT_USER;
-    const { passwordHash: _, ...publicUser } = defaultUser;
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(publicUser));
-    return publicUser;
+    return JSON.parse(raw);
   } catch {
     return null;
   }
@@ -133,9 +125,11 @@ export function setCurrentUser(user: User | null): void {
   try {
     if (user) {
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+      localStorage.setItem(MANUAL_LOGIN_KEY, 'true');
     } else {
-      // Explicitly mark as logged out so it is not re-seeded
+      // Explicitly mark as logged out
       localStorage.setItem(CURRENT_USER_KEY, 'LOGGED_OUT');
+      localStorage.removeItem(MANUAL_LOGIN_KEY);
     }
     window.dispatchEvent(new Event(EVENT_AUTH_CHANGED));
   } catch (err) {

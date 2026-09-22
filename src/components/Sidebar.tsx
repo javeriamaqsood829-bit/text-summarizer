@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   ArrowRight,
   User as UserIcon,
+  UserPlus,
 } from 'lucide-react';
 import { Conversation } from '../types';
 import { ThemeMode } from '../hooks/useTheme';
@@ -468,25 +469,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             </div>
           ) : (
-            <div
-              id="sidebar-user-signin"
-              onClick={() => onOpenAuth('login')}
-              className="flex items-center justify-between p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 hover:bg-blue-100/70 dark:hover:bg-blue-900/40 border border-blue-200/70 dark:border-blue-900/50 cursor-pointer transition-colors"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-xs">
-                  <LogIn className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 truncate">
-                  <div className="text-xs font-semibold text-blue-700 dark:text-blue-300 truncate">
-                    Sign In / Register
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                    Email Authentication
-                  </div>
-                </div>
+            <div className="p-2 rounded-xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 space-y-1.5">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                  Account
+                </span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                  Guest
+                </span>
               </div>
-              <ArrowRight className="w-3.5 h-3.5 text-blue-500" />
+              <button
+                type="button"
+                id="sidebar-signin-btn"
+                onClick={() => onOpenAuth('login')}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-xs transition-colors cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+              <button
+                type="button"
+                id="sidebar-register-btn"
+                onClick={() => onOpenAuth('register')}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-white dark:bg-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-medium transition-colors cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Register (Sign Up)</span>
+              </button>
             </div>
           )}
 

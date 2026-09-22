@@ -16,7 +16,7 @@ import { ModelInfo, SummaryMode } from '../types';
 import { ThemeMode } from '../hooks/useTheme';
 import { SummaryModeDropdown } from './SummaryModeDropdown';
 import { useAuth } from '../hooks/useAuth';
-import { LogIn, User as UserIcon, LogOut } from 'lucide-react';
+import { LogIn, User as UserIcon, LogOut, UserPlus } from 'lucide-react';
 
 interface HeaderProps {
   modelInfo: ModelInfo;
@@ -119,14 +119,24 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="font-medium max-w-[100px] truncate">{currentUser.name}</span>
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => onOpenAuth?.('login')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition-colors"
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>Sign In</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onOpenAuth?.('login')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-white/5 text-xs font-medium transition-colors cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenAuth?.('register')}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Register</span>
+            </button>
+          </div>
         )}
 
         {/* Theme Toggle */}

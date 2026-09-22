@@ -109,6 +109,17 @@
             document.documentElement.style.colorScheme = 'light';
           }
         } catch (e) {}
+
+        // Ensure fresh guest mode by default - purge old hardcoded login keys
+        try {
+          var cleanKey = 'javeria_purge_legacy_autologin_v1';
+          if (!localStorage.getItem(cleanKey)) {
+            localStorage.removeItem('javeria_current_user');
+            localStorage.removeItem('javeria_manual_login');
+            localStorage.removeItem('javeria_auth_clean_session_v7');
+            localStorage.setItem(cleanKey, 'true');
+          }
+        } catch (e) {}
       })();
     </script>
   </head>

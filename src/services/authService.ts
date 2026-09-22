@@ -1,12 +1,22 @@
 import { User, StoredUserAccount, PendingRegistration } from '../types/auth';
 
 const USERS_STORAGE_KEY = 'javeria_auth_users';
-const CURRENT_USER_KEY = 'javeria_current_user';
+const CURRENT_USER_KEY = 'javeria_active_user_session_v1';
 const PENDING_REG_KEY = 'javeria_pending_reg';
 const AUTH_INITIALIZED_KEY = 'javeria_auth_initialized';
 const EVENT_AUTH_CHANGED = 'javeria-auth-changed';
 const GUEST_USAGE_KEY = 'javeria_guest_usage_count';
 const EVENT_USAGE_CHANGED = 'javeria-usage-changed';
+const ACTIVE_USER_SESSION_KEY = 'javeria_active_user_session_v1';
+
+// Automatically clean legacy auto-login keys on script load
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.removeItem('javeria_current_user');
+    window.localStorage.removeItem('javeria_manual_login');
+    window.localStorage.removeItem('javeria_auth_clean_session_v7');
+  }
+} catch {}
 
 export const GUEST_USAGE_LIMIT = 10;
 
@@ -102,24 +112,14 @@ export function getAllUsers(): StoredUserAccount[] {
 
 export function getCurrentUser(): User | null {
   try {
-    // One-time automatic reset of legacy auto-logged in session so app starts clean as Guest
-    if (localStorage.getItem(SESSION_RESET_KEY) !== 'v7') {
-      localStorage.removeItem(CURRENT_USER_KEY);
-      localStorage.removeItem(MANUAL_LOGIN_KEY);
-      localStorage.setItem(SESSION_RESET_KEY, 'v7');
-      return null;
+    // Purge old legacy keys
+    if (localStorage.getItem('javeria_current_user')) {
+      localStorage.removeItem('javeria_current_user');
+      localStorage.removeItem('javeria_manual_login');
     }
 
-    const manualFlag = localStorage.getItem(MANUAL_LOGIN_KEY);
-    const raw = localStorage.getItem(CURRENT_USER_KEY);
-
+    const raw = localStorage.getItem(ACTIVE_USER_SESSION_KEY);
     if (!raw || raw === 'LOGGED_OUT' || raw === 'null') {
-      return null;
-    }
-
-    // Only allow manual, deliberate logins
-    if (!manualFlag) {
-      localStorage.removeItem(CURRENT_USER_KEY);
       return null;
     }
 
@@ -137,13 +137,12 @@ export function getCurrentUser(): User | null {
 export function setCurrentUser(user: User | null): void {
   try {
     if (user) {
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-      localStorage.setItem(MANUAL_LOGIN_KEY, 'true');
+      localStorage.setItem(ACTIVE_USER_SESSION_KEY, JSON.stringify(user));
     } else {
-      // Explicitly mark as logged out
-      localStorage.setItem(CURRENT_USER_KEY, 'LOGGED_OUT');
-      localStorage.removeItem(MANUAL_LOGIN_KEY);
+      localStorage.removeItem(ACTIVE_USER_SESSION_KEY);
     }
+    localStorage.removeItem('javeria_current_user');
+    localStorage.removeItem('javeria_manual_login');
     window.dispatchEvent(new Event(EVENT_AUTH_CHANGED));
   } catch (err) {
     console.error('Failed to set current user:', err);

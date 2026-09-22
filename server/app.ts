@@ -168,38 +168,38 @@ async function sendVerificationEmail(
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>Verification Code</title>
+      <title>Your verification code</title>
     </head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #ffffff; margin: 0; padding: 24px; color: #1e293b;">
-      <div style="max-width: 480px; margin: 0 auto; padding: 28px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
-        <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #0f172a;">Verify Your Email Address</h2>
-        <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 16px;">
-          Hello ${userName || 'there'},
+      <div style="max-width: 480px; margin: 0 auto; padding: 24px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #0f172a;">Your verification code</h2>
+        <p style="font-size: 15px; line-height: 1.5; color: #334155; margin: 0 0 12px;">
+          Hello ${userName ? userName : ''},
         </p>
-        <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 24px;">
-          Thank you for joining Javeria AI. Here is your 6-digit verification code:
+        <p style="font-size: 15px; line-height: 1.5; color: #334155; margin: 0 0 20px;">
+          Your one-time verification code is:
         </p>
         
         <div style="text-align: center; margin: 24px 0;">
-          <div style="display: inline-block; background-color: #f8fafc; border: 2px solid #3b82f6; border-radius: 8px; padding: 14px 32px; letter-spacing: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 32px; font-weight: 800; color: #1d4ed8;">
+          <div style="display: inline-block; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 28px; letter-spacing: 6px; font-family: monospace, Consolas, Courier; font-size: 32px; font-weight: 700; color: #0f172a;">
             ${code}
           </div>
         </div>
 
-        <p style="font-size: 13px; line-height: 1.6; color: #64748b; margin: 24px 0 0;">
-          This code will expire in 15 minutes.<br/>
-          If you did not request this registration, you can safely ignore this email.
+        <p style="font-size: 13px; line-height: 1.5; color: #64748b; margin: 20px 0 0;">
+          This code is valid for 15 minutes.<br/>
+          If you did not request this verification code, you can safely ignore this email.
         </p>
-        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 16px;" />
+        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0 12px;" />
         <p style="font-size: 12px; color: #94a3b8; margin: 0;">
-          Javeria AI
+          Javeria
         </p>
       </div>
     </body>
     </html>
   `;
 
-  const plainText = `Verification Code: ${code}\n\nHello ${userName || 'there'},\n\nHere is your 6-digit confirmation code: ${code}\n\nThis code will expire in 15 minutes.\n\nIf you did not request this code, you can safely ignore this email.\n\nRegards,\nJaveria AI`;
+  const plainText = `Your verification code: ${code}\n\nHello,\n\nYour one-time verification code is: ${code}\n\nThis code is valid for 15 minutes. If you did not request this verification, you can safely ignore this email.\n\nRegards,\nJaveria`;
 
   if (smtpUser && smtpPass) {
     try {
@@ -224,21 +224,23 @@ async function sendVerificationEmail(
           });
 
       await transporter.sendMail({
-        from: `"${fromName}" <${smtpUser}>`,
+        from: `"Javeria" <${smtpUser}>`,
         to: toEmail,
-        replyTo: `"${fromName}" <${smtpUser}>`,
-        subject: `${code} is your Javeria AI verification code`,
+        replyTo: smtpUser,
+        subject: 'Your verification code',
         text: plainText,
         html,
         headers: {
-          'X-Entity-Ref-ID': `${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+          'X-Priority': '1',
+          'Importance': 'high',
         },
       });
 
       console.log(`[Email Sent] Verification code delivered to ${toEmail} via SMTP (${isGmail ? 'Gmail' : smtpHost})`);
       return { success: true, delivered: true, message: `Verification code sent to ${toEmail}` };
     } catch (e: any) {
-      console.warn('SMTP delivery attempt failed:', e.message);
+      console.error('SMTP delivery attempt failed:', e.message);
+      return { success: false, delivered: false, message: `Failed to send email to ${toEmail}: ${e.message}` };
     }
   }
 
@@ -267,38 +269,38 @@ async function sendPasswordResetEmail(
     <html lang="en">
     <head>
       <meta charset="utf-8">
-      <title>Password Reset Code</title>
+      <title>Your password reset code</title>
     </head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #ffffff; margin: 0; padding: 24px; color: #1e293b;">
-      <div style="max-width: 480px; margin: 0 auto; padding: 28px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
-        <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #0f172a;">Password Reset Code</h2>
-        <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 16px;">
+      <div style="max-width: 480px; margin: 0 auto; padding: 24px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #0f172a;">Your password reset code</h2>
+        <p style="font-size: 15px; line-height: 1.5; color: #334155; margin: 0 0 12px;">
           Hello,
         </p>
-        <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 24px;">
+        <p style="font-size: 15px; line-height: 1.5; color: #334155; margin: 0 0 20px;">
           Here is your 6-digit code to reset your password:
         </p>
         
         <div style="text-align: center; margin: 24px 0;">
-          <div style="display: inline-block; background-color: #f8fafc; border: 2px solid #3b82f6; border-radius: 8px; padding: 14px 32px; letter-spacing: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 32px; font-weight: 800; color: #1d4ed8;">
+          <div style="display: inline-block; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 28px; letter-spacing: 6px; font-family: monospace, Consolas, Courier; font-size: 32px; font-weight: 700; color: #0f172a;">
             ${code}
           </div>
         </div>
 
-        <p style="font-size: 13px; line-height: 1.6; color: #64748b; margin: 24px 0 0;">
+        <p style="font-size: 13px; line-height: 1.5; color: #64748b; margin: 20px 0 0;">
           This code will expire in 15 minutes.<br/>
           If you did not request a password reset, you can safely ignore this message.
         </p>
-        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 16px;" />
+        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0 12px;" />
         <p style="font-size: 12px; color: #94a3b8; margin: 0;">
-          Javeria AI
+          Javeria
         </p>
       </div>
     </body>
     </html>
   `;
 
-  const plainText = `Password Reset Code: ${code}\n\nHello,\n\nHere is your 6-digit code to reset your password: ${code}\n\nThis code will expire in 15 minutes.\n\nIf you did not request a password reset, you can safely ignore this message.\n\nRegards,\nJaveria AI`;
+  const plainText = `Password Reset Code: ${code}\n\nHello,\n\nHere is your 6-digit code to reset your password: ${code}\n\nThis code will expire in 15 minutes.\n\nIf you did not request a password reset, you can safely ignore this message.\n\nRegards,\nJaveria`;
 
   if (smtpUser && smtpPass) {
     try {
@@ -323,21 +325,23 @@ async function sendPasswordResetEmail(
           });
 
       await transporter.sendMail({
-        from: `"${fromName}" <${smtpUser}>`,
+        from: `"Javeria" <${smtpUser}>`,
         to: toEmail,
-        replyTo: `"${fromName}" <${smtpUser}>`,
-        subject: `${code} is your Javeria AI password reset code`,
+        replyTo: smtpUser,
+        subject: 'Your password reset code',
         text: plainText,
         html,
         headers: {
-          'X-Entity-Ref-ID': `${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+          'X-Priority': '1',
+          'Importance': 'high',
         },
       });
 
       console.log(`[Email Sent] Password reset code delivered to ${toEmail} via SMTP`);
       return { success: true, delivered: true, message: `Password reset code sent to ${toEmail}` };
     } catch (e: any) {
-      console.warn('Failed to send password reset via SMTP:', e.message);
+      console.error('Failed to send password reset via SMTP:', e.message);
+      return { success: false, delivered: false, message: `Failed to send password reset: ${e.message}` };
     }
   }
 
@@ -767,6 +771,12 @@ apiRouter.post('/auth/send-verification', async (req, res) => {
     });
 
     const emailResult = await sendVerificationEmail(cleanEmail, cleanName, code);
+    if (!emailResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: emailResult.message || 'Could not send verification email to your address. Please try again.',
+      });
+    }
 
     return res.json({
       success: true,
@@ -855,6 +865,12 @@ apiRouter.post('/auth/resend-code', async (req, res) => {
     pending.attempts = 0;
 
     const emailResult = await sendVerificationEmail(cleanEmail, pending.name, newCode);
+    if (!emailResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: emailResult.message || 'Could not send verification email. Please try again.',
+      });
+    }
 
     return res.json({
       success: true,
@@ -893,6 +909,12 @@ apiRouter.post('/auth/forgot-password', async (req, res) => {
     });
 
     const emailResult = await sendPasswordResetEmail(cleanEmail, resetCode);
+    if (!emailResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: emailResult.message || 'Could not send password reset email. Please try again.',
+      });
+    }
 
     return res.json({
       success: true,

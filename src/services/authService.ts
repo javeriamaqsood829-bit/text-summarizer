@@ -197,27 +197,27 @@ export async function initiateRegistration(
       body: JSON.stringify({ name: cleanName, email: cleanEmail, password }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.success) {
-        return {
-          success: true,
-          delivered: Boolean(data.delivered),
-          message: data.message || `Verification code sent to ${cleanEmail}`,
-        };
-      } else if (data && data.error) {
-        return { success: false, error: data.error };
-      }
-    }
-  } catch (err: any) {
-    console.warn('Backend server verification offline or unreachable, using local verification code:', err);
-  }
+    const data = await res.json().catch(() => null);
 
-  return {
-    success: true,
-    delivered: true,
-    message: `Verification code sent to ${cleanEmail}. Please check your inbox and spam folder.`,
-  };
+    if (res.ok && data && data.success) {
+      return {
+        success: true,
+        delivered: Boolean(data.delivered),
+        message: data.message || `Verification code sent to ${cleanEmail}`,
+      };
+    }
+
+    return {
+      success: false,
+      error: data?.error || 'Could not send verification email. Please check your email address and try again.',
+    };
+  } catch (err: any) {
+    console.error('Backend server verification offline or unreachable:', err);
+    return {
+      success: false,
+      error: 'Cannot connect to email service. Please check your internet connection.',
+    };
+  }
 }
 
 /**
@@ -337,23 +337,26 @@ export async function resendVerificationCode(
         body: JSON.stringify({ email: cleanEmail }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.success) {
-          return {
-            success: true,
-            delivered: Boolean(data.delivered),
-            message: data.message || `A new verification code has been sent to ${cleanEmail}.`,
-          };
-        }
-      }
-    } catch {}
+      const data = await res.json().catch(() => null);
 
-    return {
-      success: true,
-      delivered: true,
-      message: `A new verification code has been sent to ${cleanEmail}. Please check your inbox and spam folder.`,
-    };
+      if (res.ok && data && data.success) {
+        return {
+          success: true,
+          delivered: Boolean(data.delivered),
+          message: data.message || `A new verification code has been sent to ${cleanEmail}.`,
+        };
+      }
+
+      return {
+        success: false,
+        error: data?.error || 'Could not resend verification code. Please try again.',
+      };
+    } catch {
+      return {
+        success: false,
+        error: 'Network error: could not connect to verification server.',
+      };
+    }
   } catch (err) {
     return { success: false, error: 'Could not generate verification code.' };
   }
@@ -395,23 +398,26 @@ export async function sendForgotPasswordCode(
         body: JSON.stringify({ email: cleanEmail }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.success) {
-          return {
-            success: true,
-            delivered: Boolean(data.delivered),
-            message: data.message || `Password reset code sent to ${cleanEmail}.`,
-          };
-        }
-      }
-    } catch {}
+      const data = await res.json().catch(() => null);
 
-    return {
-      success: true,
-      delivered: true,
-      message: `Password reset code sent to ${cleanEmail}. Please check your inbox and spam folder.`,
-    };
+      if (res.ok && data && data.success) {
+        return {
+          success: true,
+          delivered: Boolean(data.delivered),
+          message: data.message || `Password reset code sent to ${cleanEmail}.`,
+        };
+      }
+
+      return {
+        success: false,
+        error: data?.error || 'Could not send password reset code. Please try again.',
+      };
+    } catch {
+      return {
+        success: false,
+        error: 'Network error: could not connect to server.',
+      };
+    }
   } catch (err: any) {
     return { success: false, error: 'Could not process password reset.' };
   }

@@ -39,6 +39,7 @@ import { SAMPLE_LONG_DOCUMENT, SAMPLE_LONG_DOCUMENT_TITLE } from '../data/sample
 import { SummaryModeDropdown } from './SummaryModeDropdown';
 import { FileExtractorService, ExtractedFileResult } from '../services/FileExtractorService';
 import { ExportService } from '../services/ExportService';
+import { MarkdownViewer } from './MarkdownViewer';
 
 interface MainChatWorkspaceProps {
   inputText: string;
@@ -46,9 +47,14 @@ interface MainChatWorkspaceProps {
   statistics: TextStatistics;
   settings: SummarySettings;
   onUpdateSettings: (newSettings: Partial<SummarySettings>) => void;
-  onSummarize: (customPrompt?: string) => void;
-  onConvertToParagraph: (customCount?: '1' | '2' | '3' | 'natural') => void;
+  onSummarize: (
+    customPrompt?: string,
+    fileMeta?: { fileName?: string; fileType?: string },
+    customSettings?: Partial<SummarySettings>
+  ) => void;
+  onConvertToParagraph: (customCount?: '1' | '2' | '3' | 'natural', fileMeta?: { fileName?: string; fileType?: string }) => void;
   onLoadSample: () => void;
+  onLoadLengthyParagraph?: () => void;
   isProcessing: boolean;
   activeConversation: Conversation | null;
   onFollowUp: (
@@ -60,6 +66,7 @@ interface MainChatWorkspaceProps {
   isGuestLimitReached?: boolean;
   isAuthenticated?: boolean;
   onOpenAuth?: (mode?: 'login' | 'register') => void;
+  onAskQuestion: (question: string) => void;
 }
 
 export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
@@ -71,6 +78,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   onSummarize,
   onConvertToParagraph,
   onLoadSample,
+  onLoadLengthyParagraph,
   isProcessing,
   activeConversation,
   onFollowUp,
@@ -79,6 +87,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   isGuestLimitReached = false,
   isAuthenticated = false,
   onOpenAuth,
+  onAskQuestion,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -94,6 +103,11 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   const [extractedFile, setExtractedFile] = useState<ExtractedFileResult | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [isUserMessageExpanded, setIsUserMessageExpanded] = useState(false);
+  const [lastUserPrompt, setLastUserPrompt] = useState<string>('');
+  const [lastFileMeta, setLastFileMeta] = useState<{ fileName?: string; fileType?: string } | null>(null);
+  const chatThreadRef = useRef<HTMLDivElement>(null);
 
   // Chatbot identity greeting based on time of day - ALWAYS Javeria as requested
   const getGreetingData = () => {
@@ -161,7 +175,7 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
         setExtractStatus(status);
         setExtractProgress(pct);
       });
-      onInputChange(result.content);
+      // Keep draft textarea clean so user does not see a wall of text
       setExtractedFile(result);
       setExtractStatus(`Loaded ${result.fileName}`);
     } catch (err: any) {
@@ -180,23 +194,34 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
 
   const handleDownloadPdf = () => {
     if (!activeConversation) return;
-    const title = activeConversation.title || 'Javeria_AI_Document';
-    if (activeTab === 'paragraph' && activeConversation.currentParagraph) {
-      ExportService.downloadSingleTextPdf(title, activeConversation.currentParagraph, 'Paragraph');
-    } else if (activeTab === 'summary' && activeConversation.currentSummary) {
-      ExportService.downloadPdf(
-        title,
-        activeConversation.currentSummary,
-        activeConversation.currentParagraph,
-        {
-          mode: activeConversation.settings.mode,
-        }
-      );
-    } else {
-      ExportService.downloadSingleTextPdf(title, activeConversation.originalText, 'Document');
+    try {
+      const title = activeConversation.title || 'Javeria_AI_Document';
+      let blobUrl: string | null = null;
+      if (activeTab === 'paragraph' && activeConversation.currentParagraph) {
+        blobUrl = ExportService.downloadSingleTextPdf(title, activeConversation.currentParagraph, 'Paragraph');
+      } else if (activeConversation.currentSummary) {
+        blobUrl = ExportService.downloadPdf(
+          title,
+          activeConversation.currentSummary,
+          activeConversation.currentParagraph,
+          {
+            mode: activeConversation.settings?.mode,
+          }
+        );
+      } else if (activeConversation.originalText) {
+        blobUrl = ExportService.downloadSingleTextPdf(title, activeConversation.originalText, 'Document');
+      }
+      if (blobUrl) {
+        setPdfBlobUrl(blobUrl);
+      }
+      setDownloadNotice('PDF generated & download initiated!');
+      setTimeout(() => setDownloadNotice(null), 6000);
+    } catch (err: any) {
+      console.error('PDF export error:', err);
+      handleDownloadTxt();
+      setDownloadNotice('PDF error. Plain text copy downloaded as fallback.');
+      setTimeout(() => setDownloadNotice(null), 4000);
     }
-    setDownloadNotice('PDF downloaded successfully!');
-    setTimeout(() => setDownloadNotice(null), 2500);
   };
 
   const handleDownloadTxt = () => {
@@ -228,30 +253,178 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
     setTimeout(() => setDownloadNotice(null), 2500);
   };
 
+  const handleDownloadDoc = () => {
+    if (!activeConversation) return;
+    const title = activeConversation.title || 'Javeria_AI_Document';
+    const content =
+      activeTab === 'paragraph' && activeConversation.currentParagraph
+        ? activeConversation.currentParagraph
+        : activeTab === 'original'
+        ? activeConversation.originalText
+        : activeConversation.currentSummary;
+    ExportService.downloadDoc(title, content, activeTab);
+    setDownloadNotice('Word (.doc) document downloaded!');
+    setTimeout(() => setDownloadNotice(null), 3000);
+  };
+
+  const handleQuickAction = (
+    operation: 'shorter' | 'detailed' | 'simpler' | 'key_points' | 'terms' | 'executive',
+    label: string
+  ) => {
+    // Keep active tab as is - upper summary/paragraph card remains unchanged!
+    onFollowUp(operation, label);
+    // Smoothly scroll down to the Q&A thread so the user sees the answer below
+    setTimeout(() => {
+      chatThreadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+  };
+
   const handleSpeechToggle = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('Speech recognition is not supported in this browser.');
       return;
     }
-    // Simple mock / fallback toggle
     setIsListening((prev) => !prev);
+  };
+
+  const triggerSummarize = (promptText?: string) => {
+    if (isGuestLimitReached) {
+      onOpenAuth?.('register');
+      return;
+    }
+    const textToSend = (promptText ?? (extractedFile ? extractedFile.content : inputText)).trim();
+    if (!textToSend || isProcessing) return;
+
+    const fileMeta = extractedFile
+      ? { fileName: extractedFile.fileName, fileType: extractedFile.fileType }
+      : lastFileMeta || (activeConversation?.fileName ? { fileName: activeConversation.fileName, fileType: activeConversation.fileType } : undefined);
+
+    setLastUserPrompt(textToSend);
+    setLastFileMeta(fileMeta || null);
+    setIsUserMessageExpanded(false);
+
+    // Clear input box and attached file badge immediately
+    onInputChange('');
+    setExtractedFile(null);
+
+    onSummarize(textToSend, fileMeta);
+  };
+
+  const triggerSummarizeLengthy = (promptText?: string) => {
+    if (isGuestLimitReached) {
+      onOpenAuth?.('register');
+      return;
+    }
+    const textToSend = (promptText ?? (extractedFile ? extractedFile.content : inputText)).trim();
+    if (!textToSend || isProcessing) return;
+
+    const fileMeta = extractedFile
+      ? { fileName: extractedFile.fileName, fileType: extractedFile.fileType }
+      : lastFileMeta || (activeConversation?.fileName ? { fileName: activeConversation.fileName, fileType: activeConversation.fileType } : undefined);
+
+    setLastUserPrompt(textToSend);
+    setLastFileMeta(fileMeta || null);
+    setIsUserMessageExpanded(false);
+
+    // Clear input box and attached file badge immediately
+    onInputChange('');
+    setExtractedFile(null);
+
+    onSummarize(textToSend, fileMeta, { mode: 'lengthy_paragraph' });
+    setActiveTab('summary');
+  };
+
+  const triggerConvertToParagraph = (customCount?: '1' | '2' | '3' | 'natural') => {
+    if (isGuestLimitReached) {
+      onOpenAuth?.('register');
+      return;
+    }
+    const hasSummary = Boolean(activeConversation?.currentSummary);
+    const textToSend = (extractedFile ? extractedFile.content : inputText).trim();
+    if (!textToSend && !hasSummary) return;
+    if (isProcessing) return;
+
+    const fileMeta = extractedFile
+      ? { fileName: extractedFile.fileName, fileType: extractedFile.fileType }
+      : lastFileMeta || (activeConversation?.fileName ? { fileName: activeConversation.fileName, fileType: activeConversation.fileType } : undefined);
+
+    if (textToSend && !hasSummary) {
+      setLastUserPrompt(textToSend);
+      setLastFileMeta(fileMeta || null);
+      setIsUserMessageExpanded(false);
+      onInputChange('');
+      setExtractedFile(null);
+    }
+
+    onConvertToParagraph(customCount, fileMeta);
+    setActiveTab('paragraph');
+  };
+
+  const triggerAskQuestion = (questionText?: string) => {
+    if (isGuestLimitReached) {
+      onOpenAuth?.('register');
+      return;
+    }
+    const textToSend = (questionText ?? inputText).trim();
+    if (!textToSend || isProcessing) return;
+
+    onInputChange('');
+    onAskQuestion(textToSend);
+  };
+
+  const handleSendMessage = () => {
+    if (isGuestLimitReached) {
+      onOpenAuth?.('register');
+      return;
+    }
+    if (isProcessing) return;
+
+    // 1. If user has an extracted file and hasn't typed a question, summarize it
+    if (extractedFile && !inputText.trim()) {
+      if (settings.mode === 'lengthy_paragraph' || extractedFile.wordCount >= 50) {
+        triggerSummarizeLengthy();
+      } else {
+        triggerSummarize();
+      }
+      return;
+    }
+
+    // 2. If user typed text:
+    const trimmedInput = inputText.trim();
+    if (trimmedInput) {
+      // If we already have a summarized document or active conversation text, route to Q&A Chatbot!
+      if (activeConversation?.currentSummary || activeConversation?.originalText) {
+        triggerAskQuestion();
+      } else if (extractedFile) {
+        triggerSummarize();
+      } else {
+        // Empty state: check if it's a question or a long document
+        const isQuestion =
+          /^(what|who|where|when|why|how|can|could|is|are|tell|explain|summarize|kya|kon|kaise|kis|btao|batao|ap|tum|hi|hello|hey)\b|\?$/i.test(
+            trimmedInput
+          ) || trimmedInput.split(/\s+/).length < 25;
+
+        if (isQuestion) {
+          triggerAskQuestion();
+        } else if (settings.mode === 'lengthy_paragraph' || trimmedInput.split(/\s+/).length >= 50) {
+          triggerSummarizeLengthy();
+        } else {
+          triggerSummarize();
+        }
+      }
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isGuestLimitReached) {
-        onOpenAuth?.('register');
-        return;
-      }
-      if (inputText.trim() && !isProcessing) {
-        onSummarize();
-      }
+      handleSendMessage();
     }
   };
 
   const hasSummary = Boolean(activeConversation?.currentSummary);
-  const showHero = !hasSummary && !isProcessing;
+  const userContent = activeConversation?.originalText || lastUserPrompt;
+  const showHero = !hasSummary && !isProcessing && !userContent;
 
   return (
     <div className="flex-1 flex flex-col justify-between max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-10">
@@ -302,26 +475,80 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             </div>
           </div>
         ) : (
-          /* When Summary or Processing is active: Display Result Stream */
-          <div className="w-full space-y-5 animate-in fade-in duration-200">
-            {/* User message pill */}
-            {activeConversation?.originalText && (
-              <div className="flex justify-end">
-                <div className="max-w-2xl bg-slate-200/80 dark:bg-white/10 rounded-2xl px-4 py-3 text-xs sm:text-sm text-slate-900 dark:text-white border border-slate-300/40 dark:border-white/5">
-                  <div className="flex items-center gap-2 mb-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                    <FileText className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Original Document ({formatNumber(activeConversation.originalText.split('\n').length)} lines)</span>
+          /* When Summary or Processing or User Content is active: Display Result Stream */
+          <div className="w-full space-y-6 animate-in fade-in duration-200">
+            {/* 1. PEHLE USER KA MESSAGE SHOW HO */}
+            {userContent && (
+              <div className="flex justify-end w-full animate-in fade-in duration-200">
+                <div className="max-w-2xl w-full sm:w-auto bg-slate-900 text-white dark:bg-blue-600 rounded-2xl rounded-tr-xs p-4 sm:p-5 shadow-lg space-y-2.5">
+                  <div className="flex items-center justify-between gap-3 text-xs text-slate-300 dark:text-blue-100 font-medium border-b border-white/10 pb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px] text-white">
+                        U
+                      </div>
+                      <span className="font-semibold text-white">You</span>
+                    </div>
+                    <span className="text-[11px] opacity-80 font-mono">
+                      {formatNumber(userContent.split(/\s+/).filter(Boolean).length)} words • {formatNumber(userContent.split('\n').length)} lines
+                    </span>
                   </div>
-                  <p className="line-clamp-3 italic opacity-90">
-                    "{activeConversation.originalText.slice(0, 240)}..."
-                  </p>
+
+                  {(activeConversation?.fileName || lastFileMeta?.fileName) && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 text-xs text-white backdrop-blur-xs font-mono">
+                      <FileText className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                      <span className="truncate max-w-[280px] font-medium">
+                        {activeConversation?.fileName || lastFileMeta?.fileName}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="text-sm leading-relaxed text-slate-100 dark:text-blue-50 whitespace-pre-wrap select-text">
+                    {isUserMessageExpanded || userContent.length <= 280 ? (
+                      userContent
+                    ) : (
+                      <>
+                        {userContent.slice(0, 280)}...
+                      </>
+                    )}
+                  </div>
+
+                  {userContent.length > 280 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsUserMessageExpanded((prev) => !prev)}
+                      className="text-xs text-blue-300 dark:text-blue-200 hover:text-white underline font-medium transition-colors cursor-pointer block pt-1"
+                    >
+                      {isUserMessageExpanded ? 'Show less' : 'View full uploaded document'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* AI Assistant Output Card */}
-            <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-slate-200 dark:border-white/10 p-5 sm:p-6 shadow-xl space-y-5">
-              {/* Header bar: Tabs & Metrics */}
+            {/* 2. NEECHE RESULT MILA */}
+            {isProcessing ? (
+              <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-blue-500/30 dark:border-blue-500/20 p-6 shadow-xl space-y-4 animate-in fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                      Javeria AI is generating summary...
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Running local inference on device without API keys
+                    </div>
+                  </div>
+                </div>
+                <div className="w-full bg-slate-100 dark:bg-white/5 h-2 rounded-full overflow-hidden">
+                  <div className="bg-blue-600 h-full rounded-full w-3/4 animate-pulse" />
+                </div>
+              </div>
+            ) : (
+              /* AI Assistant Output Card */
+              <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-slate-200 dark:border-white/10 p-5 sm:p-6 shadow-xl space-y-5 animate-in fade-in">
+                {/* Header bar: Tabs & Metrics */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-white/5 pb-4">
                 {/* Result Tabs */}
                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-white/5 p-1 rounded-xl">
@@ -439,8 +666,12 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               {/* Tab Content */}
               <div className="min-h-[160px] text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-sans select-text">
                 {activeTab === 'summary' && (
-                  <div className="space-y-3 whitespace-pre-wrap">
-                    {activeConversation?.currentSummary || 'Generating your summary...'}
+                  <div className="space-y-3">
+                    {activeConversation?.currentSummary ? (
+                      <MarkdownViewer content={activeConversation.currentSummary} />
+                    ) : (
+                      <p className="text-slate-500 italic">Generating your summary...</p>
+                    )}
                   </div>
                 )}
 
@@ -537,32 +768,36 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                   <span className="text-[11px] text-slate-400 mr-1">Quick actions:</span>
                   <button
                     type="button"
-                    onClick={() => onFollowUp('shorter', 'Make Shorter')}
-                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors"
+                    disabled={isProcessing}
+                    onClick={() => handleQuickAction('shorter', 'Make Shorter')}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     ⚡ Make Shorter
                   </button>
                   <button
                     type="button"
-                    onClick={() => onFollowUp('key_points', 'Key Takeaways')}
-                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors"
+                    disabled={isProcessing}
+                    onClick={() => handleQuickAction('key_points', 'Key Takeaways')}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     📌 Key Takeaways
                   </button>
                   <button
                     type="button"
-                    onClick={() => onFollowUp('simpler', 'Simple English')}
-                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors"
+                    disabled={isProcessing}
+                    onClick={() => handleQuickAction('simpler', 'Simple English')}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     💡 Simpler Language
                   </button>
                   <button
                     type="button"
+                    disabled={isProcessing}
                     onClick={() => {
-                      onConvertToParagraph();
                       setActiveTab('paragraph');
+                      onConvertToParagraph();
                     }}
-                    className="px-2.5 py-1 rounded-lg text-xs bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-500/20 transition-colors"
+                    className="px-2.5 py-1 rounded-lg text-xs bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-500/20 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     ✨ Convert to Paragraph
                   </button>
@@ -577,6 +812,8 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                       const textToCopy =
                         activeTab === 'paragraph' && activeConversation?.currentParagraph
                           ? activeConversation.currentParagraph
+                          : activeTab === 'original'
+                          ? activeConversation?.originalText || ''
                           : activeConversation?.currentSummary || '';
                       handleCopy(textToCopy);
                     }}
@@ -607,6 +844,17 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                     <span>Download PDF</span>
                   </button>
 
+                  {/* Download Word (.doc) Button */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadDoc}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/40 transition-all active:scale-95 cursor-pointer shadow-xs"
+                    title="Download document as Microsoft Word (.doc)"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Download DOC</span>
+                  </button>
+
                   {/* Download TXT Button */}
                   <button
                     type="button"
@@ -633,12 +881,132 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
 
               {/* Download notification banner */}
               {downloadNotice && (
-                <div className="mt-2.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-[12px] text-emerald-700 dark:text-emerald-300 flex items-center gap-2 animate-in fade-in">
-                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span>{downloadNotice}</span>
+                <div className="mt-2.5 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-[12px] text-emerald-700 dark:text-emerald-300 flex items-center justify-between gap-3 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>{downloadNotice}</span>
+                  </div>
+                  {pdfBlobUrl && (
+                    <a
+                      href={pdfBlobUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={`${(activeConversation?.title || 'summary').slice(0, 30)}.pdf`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[11px] shadow-xs cursor-pointer shrink-0 transition-colors"
+                      title="Open or Save PDF directly"
+                    >
+                      <span>Open PDF</span>
+                      <span>↗</span>
+                    </a>
+                  )}
                 </div>
               )}
             </div>
+          )}
+
+          {/* Quick Suggested Questions Chips */}
+          {hasSummary && !isProcessing && (
+            <div className="pt-2 animate-in fade-in">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="text-[11.5px] font-medium text-slate-400 dark:text-slate-500 flex items-center gap-1 mr-1">
+                  <Sparkles className="w-3 h-3 text-blue-500" />
+                  Ask a question about this:
+                </span>
+                {[
+                  { label: '💡 Key takeaways kya hain?', prompt: 'Is document ke key takeaways kya hain?' },
+                  { label: '🔍 Explain in simple words', prompt: 'Can you explain this summary in very simple, easy-to-understand terms?' },
+                  { label: '⚠️ Limitations or risks?', prompt: 'What are the main risks, ethical concerns, or limitations discussed here?' },
+                  { label: '❓ Practical applications?', prompt: 'What are the key real-world applications of this?' },
+                ].map((q, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => triggerAskQuestion(q.prompt)}
+                    disabled={isProcessing}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200/70 dark:border-white/5 transition-all cursor-pointer hover:scale-[1.02] active:scale-95 text-left font-medium"
+                  >
+                    {q.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Interactive Follow-Up Q&A Chat Messages Thread */}
+          {activeConversation?.messages && activeConversation.messages.filter((m) => m.type === 'followup' || (m.role === 'assistant' && m.type !== 'summary' && m.type !== 'paragraph')).length > 0 && (
+            <div ref={chatThreadRef} className="space-y-4 pt-3 border-t border-slate-200/60 dark:border-white/5 scroll-mt-6">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                <span>Q&A Chat Thread</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/40 dark:border-blue-900/40 font-mono">
+                  Local Engine • No API Keys
+                </span>
+              </div>
+
+              {activeConversation.messages
+                .filter((m) => m.type === 'followup' || (m.role === 'assistant' && m.type !== 'summary' && m.type !== 'paragraph'))
+                .map((msg) => (
+                  <div key={msg.id} className="w-full">
+                    {msg.role === 'user' ? (
+                      <div className="flex justify-end w-full animate-in fade-in duration-150">
+                        <div className="max-w-xl bg-slate-900 dark:bg-blue-600 text-white rounded-2xl rounded-tr-xs p-3.5 sm:p-4 shadow-sm space-y-1">
+                          <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-300 dark:text-blue-100">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>You asked</span>
+                          </div>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-start w-full animate-in fade-in duration-150 mt-2">
+                        <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-slate-200 dark:border-white/10 p-4 sm:p-5 shadow-sm space-y-3">
+                          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs">
+                                <Sparkles className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-xs font-semibold text-slate-900 dark:text-white">Javeria AI</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono">
+                                On-Device Answer
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(msg.content)}
+                              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer"
+                              title="Copy response"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed select-text">
+                            <MarkdownViewer content={msg.content} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* Follow-up Question Thinking Spinner */}
+          {isProcessing && hasSummary && (
+            <div className="flex justify-start w-full animate-in fade-in duration-150 pt-2">
+              <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-blue-200/70 dark:border-blue-500/20 p-4 shadow-sm flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin shrink-0" />
+                <div className="space-y-0.5">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+                    Javeria AI is answering your question...
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Grounded local analysis • 100% On-device privacy
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           </div>
         )}
       </div>
@@ -781,6 +1149,28 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             </div>
           )}
 
+          {/* Smart Lengthy Data Detection Banner */}
+          {statistics.words >= 45 && (
+            <div className="flex items-center justify-between gap-2 p-2.5 px-3 mb-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/40 text-xs text-emerald-800 dark:text-emerald-200 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-md bg-emerald-600 text-white shrink-0">
+                  <Layers className="w-3 h-3" />
+                </span>
+                <span>
+                  <strong>Lengthy paragraph detected ({formatNumber(statistics.words)} words):</strong> Accurate multi-section distillation ready.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => triggerSummarizeLengthy()}
+                disabled={isProcessing}
+                className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[11px] shadow-xs cursor-pointer transition-all"
+              >
+                Summarize Lengthy
+              </button>
+            </div>
+          )}
+
           {/* Text Area */}
           <textarea
             ref={textareaRef}
@@ -788,7 +1178,13 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isProcessing}
-            placeholder="Message Javeria AI... (Upload or paste PDF, TXT, Code, Image, or 500+ lines to summarize or convert into paragraphs)"
+            placeholder={
+              extractedFile
+                ? `Ready to process "${extractedFile.fileName}" — click 'Summarize', 'Lengthy Paragraph', or ask any question...`
+                : hasSummary
+                ? 'Ask Javeria AI about this document or ask any question (like ChatGPT)...'
+                : 'Message Javeria AI... (Upload or paste lengthy text, PDF, Code, Image, or ask any question)'
+            }
             rows={2}
             className="w-full bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-sm sm:text-base resize-none focus:outline-none scrollbar-thin max-h-60"
           />
@@ -811,16 +1207,10 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               {/* Dedicated "Summarize" Button (Instant clear summary trigger) */}
               <button
                 type="button"
-                onClick={() => {
-                  if (isGuestLimitReached) {
-                    onOpenAuth?.('register');
-                    return;
-                  }
-                  onSummarize();
-                }}
-                disabled={!inputText.trim() || isProcessing}
+                onClick={() => triggerSummarize()}
+                disabled={(!inputText.trim() && !extractedFile) || isProcessing}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  inputText.trim() && !isProcessing
+                  (inputText.trim() || extractedFile) && !isProcessing
                     ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer'
                     : 'bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 cursor-not-allowed'
                 }`}
@@ -830,20 +1220,29 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                 <span>Summarize</span>
               </button>
 
+              {/* Dedicated "Summarize Lengthy Paragraph" Button (Specialized for Long/Dense Data) */}
+              <button
+                type="button"
+                onClick={() => triggerSummarizeLengthy()}
+                disabled={(!inputText.trim() && !extractedFile) || isProcessing}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  (inputText.trim() || extractedFile) && !isProcessing
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer'
+                    : 'bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                }`}
+                title="Accurately summarize lengthy paragraphs, dense multi-page data, and complex essays"
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-200" />
+                <span>Lengthy Paragraph</span>
+              </button>
+
               {/* Dedicated "Convert to Paragraph" Button */}
               <button
                 type="button"
-                onClick={() => {
-                  if (isGuestLimitReached) {
-                    onOpenAuth?.('register');
-                    return;
-                  }
-                  onConvertToParagraph();
-                  setActiveTab('paragraph');
-                }}
-                disabled={(!inputText.trim() && !hasSummary) || isProcessing}
+                onClick={() => triggerConvertToParagraph()}
+                disabled={(!inputText.trim() && !hasSummary && !extractedFile) || isProcessing}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  (inputText.trim() || hasSummary) && !isProcessing
+                  (inputText.trim() || hasSummary || extractedFile) && !isProcessing
                     ? 'bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-300/40 dark:border-indigo-500/30 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 cursor-pointer'
                     : 'bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 cursor-not-allowed'
                 }`}
@@ -853,12 +1252,26 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                 <span>Convert to Paragraph</span>
               </button>
 
+              {/* Sample Lengthy Paragraph Pill */}
+              {onLoadLengthyParagraph && (
+                <button
+                  type="button"
+                  onClick={onLoadLengthyParagraph}
+                  disabled={isProcessing}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-medium border border-emerald-200/50 dark:border-emerald-800/40 transition-colors cursor-pointer"
+                  title="Load a dense 350-word sample paragraph to test accurate summarization"
+                >
+                  <Layers className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Lengthy Sample</span>
+                </button>
+              )}
+
               {/* Sample Document Pill */}
               <button
                 type="button"
                 onClick={onLoadSample}
                 disabled={isProcessing}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-medium border border-transparent dark:border-white/5 transition-colors"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-medium border border-transparent dark:border-white/5 transition-colors cursor-pointer"
                 title="Load 500+ lines test document"
               >
                 <FileText className="w-3.5 h-3.5 text-slate-500" />
@@ -890,23 +1303,17 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                 <Waveform className="w-4 h-4" />
               </button>
 
-              {/* Send / Summarize Icon Button */}
+              {/* Send / Message Icon Button */}
               <button
                 type="button"
-                onClick={() => {
-                  if (isGuestLimitReached) {
-                    onOpenAuth?.('register');
-                    return;
-                  }
-                  onSummarize();
-                }}
-                disabled={!inputText.trim() || isProcessing}
+                onClick={handleSendMessage}
+                disabled={(!inputText.trim() && !extractedFile) || isProcessing}
                 className={`p-2 rounded-xl transition-all ${
-                  inputText.trim() && !isProcessing
+                  (inputText.trim() || extractedFile) && !isProcessing
                     ? 'bg-slate-900 dark:bg-white text-white dark:text-black shadow-md hover:scale-105 active:scale-95 cursor-pointer'
                     : 'bg-slate-200 dark:bg-white/5 text-slate-400 cursor-not-allowed'
                 }`}
-                title="Summarize (Enter)"
+                title="Send message or process document (Enter)"
               >
                 <ArrowUp className="w-4 h-4 stroke-[2.5]" />
               </button>
@@ -1014,26 +1421,30 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               </p>
             </div>
 
-            {/* Card 3: Executive Analytics Brief */}
+            {/* Card 3: Accurate Lengthy Data & Paragraph Summarizer */}
             <div
               onClick={() => {
                 if (isGuestLimitReached) {
                   onOpenAuth?.('register');
                   return;
                 }
-                onUpdateSettings({ mode: 'executive' });
-                onLoadSample();
+                if (onLoadLengthyParagraph) {
+                  onLoadLengthyParagraph();
+                } else {
+                  onUpdateSettings({ mode: 'lengthy_paragraph' });
+                  onLoadSample();
+                }
               }}
               className="p-4 rounded-2xl bg-white/60 dark:bg-[#121620] border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/15 cursor-pointer transition-all hover:-translate-y-0.5 group"
             >
               <div className="flex items-center gap-2">
-                <FileText className="w-3.5 h-3.5 text-emerald-500" />
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-blue-500 transition-colors">
-                  Executive Brief
+                <Layers className="w-3.5 h-3.5 text-emerald-500" />
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-emerald-500 transition-colors">
+                  Lengthy Paragraph & Data
                 </h3>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                High-level synthesis designed for quick leadership review and decision-making
+                Accurately extract thesis, critical arguments, and statistics from long dense text
               </p>
             </div>
           </div>

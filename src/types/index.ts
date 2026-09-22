@@ -29,7 +29,8 @@ export type SummaryMode =
   | 'key_points'
   | 'academic'
   | 'simple_english'
-  | 'executive';
+  | 'executive'
+  | 'lengthy_paragraph';
 
 export type SummaryLength = 'short' | 'medium' | 'long';
 
@@ -116,6 +117,8 @@ export interface Conversation {
     runtime: string;
   };
   metrics?: QualityMetrics;
+  fileName?: string;
+  fileType?: string;
 }
 
 export interface QualityMetrics {

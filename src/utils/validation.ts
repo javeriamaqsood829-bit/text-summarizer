@@ -8,17 +8,17 @@ export function validateInputText(text: string): ValidationResult {
   if (!text || text.trim().length === 0) {
     return {
       isValid: false,
-      error: 'Please enter or paste text to summarize.',
+      error: 'Please enter text or upload a file (PDF, TXT, Code, or Image) to summarize.',
     };
   }
 
   const clean = text.trim();
-  const words = clean.split(/\s+/).length;
+  const words = clean.split(/\s+/).filter(Boolean).length;
 
-  if (words < 10) {
+  if (words === 0) {
     return {
       isValid: false,
-      error: 'Input text is too short. Please provide at least 15-20 words for meaningful summarization.',
+      error: 'Please enter valid text to summarize.',
     };
   }
 

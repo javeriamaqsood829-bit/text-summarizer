@@ -794,7 +794,8 @@ app.post('/api/extract-file', async (req, res) => {
       'go', 'rs', 'swift', 'kt', 'html', 'css', 'sql', 'sh'
     ];
 
-    if (textExts.includes(ext) || cleanMime.startsWith('text/') || cleanMime.includes('json') || cleanMime.includes('javascript')) {
+    // Direct UTF-8 decode for text, code, configuration, markdown, etc.
+    if (textExts.includes(ext) || cleanMime.startsWith('text/') || cleanMime.includes('json') || cleanMime.includes('javascript') || cleanMime.includes('xml')) {
       const text = Buffer.from(cleanBase64, 'base64').toString('utf-8');
       return res.json({
         success: true,
@@ -804,59 +805,12 @@ app.post('/api/extract-file', async (req, res) => {
       });
     }
 
-    // For images or PDFs, check if Gemini API key is available
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const { GoogleGenAI } = await import('@google/genai');
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-        let promptText = 'Transcribe and extract all textual contents, code, tables, headings, and data from this file cleanly and comprehensively. Return ONLY the extracted text content so it can be summarized or converted into a cohesive paragraph.';
-        if (cleanMime.startsWith('image/')) {
-          promptText = 'Extract all the visible text, words, labels, code, and handwriting in this image. Preserve paragraph flow and structure. Return only the extracted text.';
-        }
-
-        const effectiveMime = cleanMime.startsWith('image/')
-          ? cleanMime
-          : cleanMime.includes('pdf')
-          ? 'application/pdf'
-          : 'application/octet-stream';
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: effectiveMime,
-                    data: cleanBase64,
-                  },
-                },
-                {
-                  text: promptText,
-                },
-              ],
-            },
-          ],
-        });
-
-        const extracted = response.text?.trim();
-        if (extracted && extracted.length > 5) {
-          return res.json({
-            success: true,
-            fileName,
-            text: extracted,
-            method: 'gemini_vision',
-          });
-        }
-      } catch (geminiErr: any) {
-        console.warn('Gemini extraction error:', geminiErr?.message || geminiErr);
-      }
-    }
-
-    return res.status(422).json({
-      error: 'Server could not extract text from this binary format. Please use client OCR.',
+    // Binary files (Image, PDF) are processed with local client-side OCR & PDF extraction without any API key
+    return res.json({
+      success: false,
+      fileName,
+      useLocalOcr: true,
+      message: 'Binary file detected; client-side local OCR engine will extract text privately without API keys.',
     });
   } catch (err: any) {
     console.error('Error in /api/extract-file:', err);

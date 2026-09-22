@@ -14,7 +14,12 @@ import { useAuth } from './hooks/useAuth';
 import { SummarySettings, SummaryMode, Conversation } from './types';
 import { calculateTextStatistics } from './utils/textStatistics';
 import { validateInputText } from './utils/validation';
-import { SAMPLE_LONG_DOCUMENT, SAMPLE_LONG_DOCUMENT_TITLE } from './data/sampleDocument';
+import {
+  SAMPLE_LONG_DOCUMENT,
+  SAMPLE_LONG_DOCUMENT_TITLE,
+  SAMPLE_LENGTHY_PARAGRAPH,
+  SAMPLE_LENGTHY_PARAGRAPH_TITLE,
+} from './data/sampleDocument';
 import { AlertCircle, X } from 'lucide-react';
 
 const DEFAULT_SETTINGS: SummarySettings = {
@@ -50,6 +55,7 @@ export default function App() {
     cancelSummarization,
     convertToParagraph,
     executeFollowUp,
+    askQuestion,
   } = useSummarizer();
 
   const [inputText, setInputText] = useState('');
@@ -97,11 +103,10 @@ export default function App() {
 
   // Synchronize input text when active conversation changes
   useEffect(() => {
+    // Keep draft input box clean so previous documents never clutter the prompt area
+    setInputText('');
     if (activeConversation) {
-      setInputText(activeConversation.originalText || '');
       setSettings(activeConversation.settings || DEFAULT_SETTINGS);
-    } else {
-      setInputText('');
     }
   }, [activeConversationId]);
 
@@ -162,35 +167,73 @@ export default function App() {
     }
   };
 
-  const handleSummarize = async () => {
+  const handleLoadLengthyParagraph = () => {
+    setInputText(SAMPLE_LENGTHY_PARAGRAPH);
+    setValidationError(null);
+    const lengthySettings = { ...settings, mode: 'lengthy_paragraph' as SummaryMode };
+    if (!activeConversation) {
+      createNewConversation(lengthySettings, SAMPLE_LENGTHY_PARAGRAPH, SAMPLE_LENGTHY_PARAGRAPH_TITLE);
+    } else {
+      saveActiveConversation({
+        ...activeConversation,
+        originalText: SAMPLE_LENGTHY_PARAGRAPH,
+        title: SAMPLE_LENGTHY_PARAGRAPH_TITLE,
+        settings: lengthySettings,
+      });
+    }
+  };
+
+  const handleSummarize = async (
+    customPrompt?: string,
+    fileMeta?: { fileName?: string; fileType?: string },
+    customSettings?: Partial<SummarySettings>
+  ) => {
     setValidationError(null);
     if (!checkGuestUsageAllowed()) {
       return;
     }
 
-    const validation = validateInputText(inputText);
+    const textToSummarize = (customPrompt ?? inputText).trim();
+    const validation = validateInputText(textToSummarize);
     if (!validation.isValid) {
       setValidationError(validation.error || 'Please enter text to summarize.');
       return;
     }
 
+    // Immediately clear input box so it is not shown below again
+    setInputText('');
+
     if (!currentUser) {
       recordGuestUse();
     }
 
+    const activeSettings = customSettings ? { ...settings, ...customSettings } : settings;
+
     let targetConv = activeConversation;
     if (!targetConv) {
-      targetConv = createNewConversation(settings, inputText);
+      targetConv = createNewConversation(activeSettings, textToSummarize);
     } else {
-      targetConv = { ...targetConv, originalText: inputText, settings };
+      targetConv = { ...targetConv, originalText: textToSummarize, settings: activeSettings };
     }
 
-    await startSummarization(inputText, settings, targetConv, (updated) => {
+    if (fileMeta?.fileName) {
+      targetConv.fileName = fileMeta.fileName;
+      targetConv.fileType = fileMeta.fileType;
+    }
+
+    await startSummarization(textToSummarize, activeSettings, targetConv, (updated) => {
+      if (fileMeta?.fileName) {
+        updated.fileName = fileMeta.fileName;
+        updated.fileType = fileMeta.fileType;
+      }
       saveActiveConversation(updated);
     });
   };
 
-  const handleConvertToParagraph = async (customParagraphCount?: '1' | '2' | '3' | 'natural') => {
+  const handleConvertToParagraph = async (
+    customParagraphCount?: '1' | '2' | '3' | 'natural',
+    fileMeta?: { fileName?: string; fileType?: string }
+  ) => {
     setValidationError(null);
     if (!checkGuestUsageAllowed()) {
       return;
@@ -203,6 +246,7 @@ export default function App() {
       if (!currentUser) {
         recordGuestUse();
       }
+      setInputText('');
       await convertToParagraph(
         activeConversation.currentSummary,
         targetCount,
@@ -215,12 +259,16 @@ export default function App() {
     }
 
     // 2. If user pasted input text and directly clicks "Convert to Paragraph"
-    if (inputText.trim()) {
-      const validation = validateInputText(inputText);
+    const textToConvert = inputText.trim();
+    if (textToConvert) {
+      const validation = validateInputText(textToConvert);
       if (!validation.isValid) {
         setValidationError(validation.error || 'Please enter text to summarize into paragraphs.');
         return;
       }
+
+      // Immediately clear input box so it is not shown below again
+      setInputText('');
 
       if (!currentUser) {
         recordGuestUse();
@@ -228,12 +276,21 @@ export default function App() {
 
       let targetConv = activeConversation;
       if (!targetConv) {
-        targetConv = createNewConversation(settings, inputText);
+        targetConv = createNewConversation(settings, textToConvert);
       } else {
-        targetConv = { ...targetConv, originalText: inputText, settings };
+        targetConv = { ...targetConv, originalText: textToConvert, settings };
       }
 
-      await startSummarization(inputText, settings, targetConv, async (summarizedConv) => {
+      if (fileMeta?.fileName) {
+        targetConv.fileName = fileMeta.fileName;
+        targetConv.fileType = fileMeta.fileType;
+      }
+
+      await startSummarization(textToConvert, settings, targetConv, async (summarizedConv) => {
+        if (fileMeta?.fileName) {
+          summarizedConv.fileName = fileMeta.fileName;
+          summarizedConv.fileType = fileMeta.fileType;
+        }
         saveActiveConversation(summarizedConv);
         if (summarizedConv.currentSummary) {
           await convertToParagraph(
@@ -264,6 +321,31 @@ export default function App() {
       recordGuestUse();
     }
     await executeFollowUp(operation, label, activeConversation, (updated) => {
+      saveActiveConversation(updated);
+    });
+  };
+
+  const handleAskQuestion = async (question: string) => {
+    setValidationError(null);
+    if (!checkGuestUsageAllowed()) {
+      return;
+    }
+
+    const trimmed = question.trim();
+    if (!trimmed) return;
+
+    setInputText('');
+
+    if (!currentUser) {
+      recordGuestUse();
+    }
+
+    let targetConv = activeConversation;
+    if (!targetConv) {
+      targetConv = createNewConversation(settings, '');
+    }
+
+    await askQuestion(trimmed, targetConv, settings, (updated) => {
       saveActiveConversation(updated);
     });
   };
@@ -353,6 +435,7 @@ export default function App() {
             onSummarize={handleSummarize}
             onConvertToParagraph={handleConvertToParagraph}
             onLoadSample={handleLoadSample}
+            onLoadLengthyParagraph={handleLoadLengthyParagraph}
             isProcessing={isProcessing}
             activeConversation={activeConversation}
             onFollowUp={handleFollowUp}
@@ -361,6 +444,7 @@ export default function App() {
             isGuestLimitReached={isGuestLimitReached}
             isAuthenticated={isAuthenticated}
             onOpenAuth={handleOpenAuth}
+            onAskQuestion={handleAskQuestion}
           />
         </main>
       </div>

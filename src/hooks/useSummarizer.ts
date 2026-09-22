@@ -8,6 +8,7 @@ import {
 } from '../types';
 import { summarizationService } from '../services/SummarizationService';
 import { localModelService } from '../services/LocalModelService';
+import { localQAService } from '../services/LocalQAService';
 import { generateSmartTitle } from '../utils/formatting';
 import { calculateTextStatistics } from '../utils/textStatistics';
 
@@ -179,31 +180,33 @@ export function useSummarizer() {
       activeConversation: Conversation,
       onComplete: (updatedConversation: Conversation) => void
     ) => {
-      if (!activeConversation.currentSummary) return;
+      if (!activeConversation.currentSummary && !activeConversation.originalText) return;
       setIsProcessing(true);
       setError(null);
 
       try {
+        const textToUse = activeConversation.currentSummary || activeConversation.originalText;
         const result = await localModelService.executeFollowUp(
           operation,
-          activeConversation.currentSummary,
-          activeConversation.originalText
+          textToUse,
+          activeConversation.originalText || textToUse
         );
 
+        const now = Date.now();
         const userMsg: Message = {
-          id: `msg_user_${Date.now()}`,
+          id: `msg_user_${now}`,
           role: 'user',
           content: userLabel,
           type: 'followup',
-          createdAt: Date.now(),
+          createdAt: now,
         };
 
         const asstMsg: Message = {
-          id: `msg_asst_${Date.now()}`,
+          id: `msg_asst_${now + 1}`,
           role: 'assistant',
           content: result,
-          type: 'summary',
-          createdAt: Date.now(),
+          type: 'followup', // Marked as followup so it displays in the Q&A Chat Thread
+          createdAt: now + 1,
           metadata: {
             wordCount: calculateTextStatistics(result).words,
           },
@@ -212,13 +215,87 @@ export function useSummarizer() {
         const updatedConv: Conversation = {
           ...activeConversation,
           updatedAt: Date.now(),
-          currentSummary: operation === 'key_points' || operation === 'terms' ? activeConversation.currentSummary : result,
+          // Preserve currentSummary and currentParagraph so the upper summary card never changes
+          currentSummary: activeConversation.currentSummary,
+          currentParagraph: activeConversation.currentParagraph,
           messages: [...activeConversation.messages, userMsg, asstMsg],
         };
 
         onComplete(updatedConv);
       } catch (err: any) {
         setError(err?.message || 'Failed to process follow-up operation.');
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    []
+  );
+
+  const askQuestion = useCallback(
+    async (
+      questionText: string,
+      activeConversation: Conversation | null,
+      settings: SummarySettings,
+      onComplete: (updatedConversation: Conversation) => void
+    ) => {
+      const trimmed = questionText.trim();
+      if (!trimmed) return;
+
+      setIsProcessing(true);
+      setError(null);
+
+      try {
+        const userMsg: Message = {
+          id: `msg_user_${Date.now()}`,
+          role: 'user',
+          content: trimmed,
+          type: 'followup',
+          createdAt: Date.now(),
+        };
+
+        const currentConv = activeConversation || {
+          id: `conv_${Date.now()}`,
+          title: generateSmartTitle(trimmed),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages: [],
+          originalText: '',
+          currentSummary: '',
+          currentParagraph: '',
+          settings,
+          modelInformation: {
+            name: 'Distil-BART-Edge / Local Hybrid',
+            runtime: 'Local Engine (Optimized)',
+          },
+        };
+
+        const qaResult = await localQAService.answerQuestion(
+          trimmed,
+          currentConv.originalText,
+          currentConv.currentSummary,
+          currentConv.messages
+        );
+
+        const asstMsg: Message = {
+          id: `msg_asst_${Date.now()}`,
+          role: 'assistant',
+          content: qaResult.answer,
+          type: 'followup',
+          createdAt: Date.now(),
+          metadata: {
+            wordCount: calculateTextStatistics(qaResult.answer).words,
+          },
+        };
+
+        const updatedConv: Conversation = {
+          ...currentConv,
+          updatedAt: Date.now(),
+          messages: [...currentConv.messages, userMsg, asstMsg],
+        };
+
+        onComplete(updatedConv);
+      } catch (err: any) {
+        setError(err?.message || 'Failed to answer question.');
       } finally {
         setIsProcessing(false);
       }
@@ -234,5 +311,6 @@ export function useSummarizer() {
     cancelSummarization,
     convertToParagraph,
     executeFollowUp,
+    askQuestion,
   };
 }

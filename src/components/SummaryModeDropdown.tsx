@@ -13,6 +13,11 @@ export const SUMMARY_MODE_OPTIONS: SummaryModeOption[] = [
   { id: 'balanced', label: 'Balanced Summary', description: 'Standard balanced synthesis of key themes' },
   { id: 'detailed', label: 'Detailed Summary', description: 'In-depth, comprehensive analysis' },
   { id: 'key_points', label: 'Key Points', description: 'High-impact structured bullet points' },
+  {
+    id: 'lengthy_paragraph',
+    label: 'Lengthy Paragraph & Data',
+    description: 'High-accuracy deep extraction of thesis, critical points & statistics from long texts',
+  },
   { id: 'academic', label: 'Academic Summary', description: 'Scholarly structure with methodology & context' },
   { id: 'simple_english', label: 'Simple English', description: 'Accessible wording without complex jargon' },
   { id: 'executive', label: 'Executive Summary', description: 'High-level strategic briefing with action points' },

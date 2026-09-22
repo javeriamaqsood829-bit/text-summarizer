@@ -159,6 +159,16 @@ export class SummarizationService {
       }
     }
 
+    // Safety fallback: if no intermediate summary was produced, summarize directly
+    if (!reducedSummary || reducedSummary.trim().length === 0) {
+      reducedSummary = await localModelService.summarizeChunk(
+        rawText,
+        settings.mode,
+        settings.length,
+        targetRatio
+      );
+    }
+
     if (this.isCancelled) throw new Error('Summarization cancelled by user.');
 
     // STAGE 5 (PHASE 4): Final synthesis & paragraph creation

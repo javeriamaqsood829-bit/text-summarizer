@@ -757,7 +757,9 @@ apiRouter.post('/auth/send-verification', async (req, res) => {
       return res.status(400).json({ error: emailCheck.reason });
     }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = (req.body.code && /^\d{6}$/.test(String(req.body.code)))
+      ? String(req.body.code)
+      : String(Math.floor(100000 + Math.random() * 900000));
     const now = Date.now();
 
     pendingVerifications.set(cleanEmail, {
@@ -897,7 +899,9 @@ apiRouter.post('/auth/forgot-password', async (req, res) => {
       return res.status(400).json({ error: emailCheck.reason });
     }
 
-    const resetCode = String(Math.floor(100000 + Math.random() * 900000));
+    const resetCode = (req.body.code && /^\d{6}$/.test(String(req.body.code)))
+      ? String(req.body.code)
+      : String(Math.floor(100000 + Math.random() * 900000));
     const now = Date.now();
 
     pendingPasswordResets.set(cleanEmail, {

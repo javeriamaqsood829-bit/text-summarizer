@@ -227,7 +227,7 @@ async function sendVerificationEmail(
         from: `"Javeria" <${smtpUser}>`,
         to: toEmail,
         replyTo: smtpUser,
-        subject: 'Your verification code',
+        subject: `${code} is your Javeria verification code`,
         text: plainText,
         html,
         headers: {
@@ -328,7 +328,7 @@ async function sendPasswordResetEmail(
         from: `"Javeria" <${smtpUser}>`,
         to: toEmail,
         replyTo: smtpUser,
-        subject: 'Your password reset code',
+        subject: `${code} is your Javeria password reset code`,
         text: plainText,
         html,
         headers: {

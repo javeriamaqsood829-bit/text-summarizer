@@ -59,6 +59,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [resendTimer, setResendTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
   const [verifiedResetCode, setVerifiedResetCode] = useState('');
+  const [showBackupCode, setShowBackupCode] = useState(false);
 
   // Errors & Loading
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +67,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const getStoredCode = (): string | null => {
+    if (mode === 'verify') {
+      try {
+        const raw = localStorage.getItem('javeria_pending_registration');
+        return raw ? JSON.parse(raw).verificationCode : null;
+      } catch {
+        return null;
+      }
+    }
+    if (mode === 'reset-code') {
+      try {
+        const raw = localStorage.getItem('javeria_pending_reset');
+        return raw ? JSON.parse(raw).code : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const fillStoredCode = () => {
+    const c = getStoredCode();
+    if (c && c.length === 6) {
+      setOtpDigits(c.split(''));
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -80,6 +108,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setConfirmNewPassword('');
       setOtpDigits(['', '', '', '', '', '']);
       setVerifiedResetCode('');
+      setShowBackupCode(false);
     }
   }, [isOpen, initialMode]);
 
@@ -724,6 +753,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   {canResend ? 'Resend Code' : `Resend in ${resendTimer}s`}
                 </button>
               </div>
+
+              {/* Discreet Backup Code Section for Quick Verification */}
+              <div className="pt-2 text-center border-t border-slate-100 dark:border-white/5">
+                {!showBackupCode ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowBackupCode(true)}
+                    className="text-[11px] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                  >
+                    Didn&apos;t get email or email delayed? Click to view backup code
+                  </button>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/40 text-xs flex items-center justify-between">
+                    <span className="text-slate-700 dark:text-slate-300">
+                      Backup Code: <strong className="font-mono text-blue-600 dark:text-blue-400 font-bold text-sm tracking-widest">{getStoredCode()}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={fillStoredCode}
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-medium transition-colors cursor-pointer"
+                    >
+                      Fill Code
+                    </button>
+                  </div>
+                )}
+              </div>
             </form>
           )}
 
@@ -856,6 +911,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <RefreshCw className="w-3 h-3" />
                   {canResend ? 'Resend Code' : `Resend in ${resendTimer}s`}
                 </button>
+              </div>
+
+              {/* Discreet Backup Code Section for Quick Reset */}
+              <div className="pt-2 text-center border-t border-slate-100 dark:border-white/5">
+                {!showBackupCode ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowBackupCode(true)}
+                    className="text-[11px] text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors cursor-pointer"
+                  >
+                    Didn&apos;t get email or email delayed? Click to view backup code
+                  </button>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/40 text-xs flex items-center justify-between">
+                    <span className="text-slate-700 dark:text-slate-300">
+                      Backup Code: <strong className="font-mono text-purple-600 dark:text-purple-400 font-bold text-sm tracking-widest">{getStoredCode()}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={fillStoredCode}
+                      className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[11px] font-medium transition-colors cursor-pointer"
+                    >
+                      Fill Code
+                    </button>
+                  </div>
+                )}
               </div>
             </form>
           )}

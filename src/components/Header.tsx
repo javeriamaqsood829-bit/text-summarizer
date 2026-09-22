@@ -10,6 +10,7 @@ import {
   Trash2,
   HelpCircle,
   Cpu,
+  History,
 } from 'lucide-react';
 import { ModelInfo, SummaryMode } from '../types';
 import { ThemeMode } from '../hooks/useTheme';
@@ -28,6 +29,7 @@ interface HeaderProps {
   onOpenAuth?: (mode?: 'login' | 'register') => void;
   onToggleSidebar: () => void;
   onClearCurrentChat: () => void;
+  onOpenHistory?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -41,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onToggleSidebar,
   onClearCurrentChat,
+  onOpenHistory,
 }) => {
   const { currentUser, logout } = useAuth();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -140,6 +143,18 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </button>
 
+        {/* Quick History Button */}
+        {onOpenHistory && (
+          <button
+            type="button"
+            onClick={onOpenHistory}
+            className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/5 transition-colors"
+            title="Open Conversation History"
+          >
+            <History className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Three dots menu ••• */}
         <div className="relative" ref={moreMenuRef}>
           <button
@@ -153,6 +168,20 @@ export const Header: React.FC<HeaderProps> = ({
 
           {showMoreMenu && (
             <div className="absolute right-0 mt-2 w-52 p-1.5 rounded-2xl bg-white dark:bg-[#181c26] border border-slate-200 dark:border-white/10 shadow-2xl z-50 text-xs animate-in fade-in slide-in-from-top-2">
+              {onOpenHistory && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenHistory();
+                    setShowMoreMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 text-slate-700 dark:text-slate-200 text-left font-medium text-blue-600 dark:text-blue-400"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Conversation History</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {

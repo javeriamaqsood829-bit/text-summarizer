@@ -96,6 +96,8 @@ export function useSummarizer() {
             runtime: 'Local Engine (Optimized)',
           },
           metrics: result.metrics,
+          userEmail: activeConversation?.userEmail,
+          userId: activeConversation?.userId,
         };
 
         onComplete(updatedConv);
@@ -289,8 +291,14 @@ export function useSummarizer() {
 
         const updatedConv: Conversation = {
           ...currentConv,
+          title:
+            !currentConv.title || currentConv.title === 'New Summary'
+              ? generateSmartTitle(trimmed)
+              : currentConv.title,
           updatedAt: Date.now(),
           messages: [...currentConv.messages, userMsg, asstMsg],
+          originalText: currentConv.originalText || trimmed,
+          currentSummary: currentConv.currentSummary,
         };
 
         onComplete(updatedConv);

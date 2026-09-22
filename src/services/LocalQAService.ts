@@ -53,6 +53,30 @@ export class LocalQAService {
     // Detect language / tone
     const isRomanUrdu = this.detectRomanUrdu(trimmedQuery);
 
+    // 0. Primary AI query via backend Gemini Engine (ChatGPT-grade answers)
+    try {
+      const response = await fetch('/api/ai/gemini-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: trimmedQuery,
+          documentContext: fullDoc,
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.reply && typeof data.reply === 'string' && data.reply.trim().length > 15) {
+          return {
+            answer: data.reply.trim(),
+            source: isDocAvailable ? 'document' : 'general',
+            confidence: 0.99,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Backend AI chat connection notice, using local engine fallback:', e);
+    }
+
     // 1. Check if user is asking about the provided document
     const isAskingAboutDoc =
       isDocAvailable &&
@@ -445,23 +469,38 @@ export class LocalQAService {
 
     if (isRomanUrdu) {
       return (
-        `### 💡 Generative AI & Large Language Models (LLMs):\n\n` +
-        `**Generative Artificial Intelligence (GenAI)** aisi modern technology hai jo user ki di gayi instructions (prompts) par naya content (text, images, audio, video, code) create karti hai.\n\n` +
-        `**Aham Nuqaat:**\n` +
-        `• **Foundational Models:** Transformers aur Deep Neural Networks par mabni hotay hain jo arbon words par train kiye jatay hain.\n` +
-        `• **Usage:** Writing, Coding, Summarization, Translation, aur Research me behtareen madadgar hain.\n` +
-        `• **Privacy & Local AI:** Javeria AI ki tarah bina external API key ke directly aap ke device par kaam kar saktay hain.`
+        `### 🤖 Artificial Intelligence (AI) Par Mukhtasar Note:\n\n` +
+        `**Artificial Intelligence (AI)** computer science ki aik nihayat ahem shakh hai jiska maqsad aisi machines aur software banana hai jo insano ki tarah sochnay, seekhnay, faislay karnay aur masaail hal karnay ki salahiyat rakhti hon.\n\n` +
+        `#### 1. Bunyadi Aqsaam aur Technologies:\n` +
+        `• **Machine Learning (ML):** Isme computer bina direct coding ke purane data se patterns seekhta hai.\n` +
+        `• **Deep Learning (DL):** Insani dimagh ke neural networks ki tarah layered algorithms jo tasweeron, aawaz aur text ko samajhte hain.\n` +
+        `• **Generative AI & LLMs:** Javeria AI aur ChatGPT ki tarah nayi tehreer, code aur designs create karne wali technology.\n` +
+        `• **Natural Language Processing (NLP):** Insani zubaan ko samajhna aur tarjuma karna.\n\n` +
+        `#### 2. Rozmarrah Zindagi Me Istemaal (Applications):\n` +
+        `• **Healthcare:** Bimariyon ki barwaqt tashkhees aur nayi medicines ki research.\n` +
+        `• **Education:** Har talib-e-ilm ke liye personalized learning aur auto summarization.\n` +
+        `• **Transport:** Self-driving gaariyan aur smart traffic control systems.\n` +
+        `• **Finance:** Fraud detection aur automated banking services.\n\n` +
+        `#### 3. Faiday aur Mustaqbil:\n` +
+        `AI waqt ki bachat karti hai aur insani ghaltiyon ko kam karti hai. Aane walay daur me AI aur insani zehnat mil kar dunya ke mushkil tareen masaail hal karengi.`
       );
     }
 
     return (
-      `### 💡 Generative AI & LLMs Architecture:\n\n` +
-      `**Generative AI** utilizes deep learning neural networks, primarily the **Transformer architecture** (introduced in "Attention Is All You Need", 2017), to generate novel data.\n\n` +
-      `**Core Components:**\n` +
-      `• **Self-Attention Mechanism:** Enables models to weigh the significance of different words in a sentence, capturing long-range context.\n` +
-      `• **Pre-training & Fine-tuning:** Trained on massive text corpora to learn world knowledge, then fine-tuned with Reinforcement Learning from Human Feedback (RLHF).\n` +
-      `• **Inference:** Predicts probability distributions over next tokens autoregressively.\n` +
-      `• **Applications:** Code synthesis, contextual document summarization, semantic reasoning, and interactive dialogue.`
+      `### 🤖 Short Note on Artificial Intelligence (AI)\n\n` +
+      `**Artificial Intelligence (AI)** is the simulation of human intelligence processes by computer systems. It enables machines to learn from experience, adjust to new inputs, and perform human-like cognitive tasks such as problem-solving, reasoning, perception, and natural language understanding.\n\n` +
+      `#### 1. Core Branches & Technologies\n` +
+      `• **Machine Learning (ML):** Algorithms that analyze large volumes of data to discover underlying patterns and make accurate predictions without explicit static programming.\n` +
+      `• **Deep Learning (DL):** Multi-layered artificial neural networks inspired by biological neurons, powering advanced recognition in speech, vision, and text.\n` +
+      `• **Generative AI & LLMs:** Transformer-based architectures capable of generating human-quality prose, synthesizing complex code, and generating multimedia.\n` +
+      `• **Computer Vision & Robotics:** Enabling automated vehicles, industrial robots, and biometric authentication.\n\n` +
+      `#### 2. Key Real-World Applications\n` +
+      `• **Healthcare:** Accelerating disease diagnostics, genomic research, and robotic-assisted precision surgery.\n` +
+      `• **Education & Research:** Automated document summarization, adaptive tutoring, and rapid knowledge synthesis.\n` +
+      `• **Finance & E-Commerce:** Real-time fraud detection, automated algorithmic trading, and personalized recommendation engines.\n` +
+      `• **Automation & Logistics:** Autonomous self-driving vehicles, smart warehouse routing, and energy grid optimization.\n\n` +
+      `#### 3. Benefits & Future Outlook\n` +
+      `AI dramatically boosts productivity, eliminates hazardous manual tasks, and uncovers insights across complex datasets. Moving forward, responsible AI governance, data privacy, and ethical development ensure it continues to augment human potential worldwide.`
     );
   }
 

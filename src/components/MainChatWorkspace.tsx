@@ -96,6 +96,12 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
 
+  // Voice speech-to-text dictation state
+  const recognitionRef = useRef<any>(null);
+  const speechBaseTextRef = useRef<string>('');
+  const [speechNotice, setSpeechNotice] = useState<string | null>(null);
+  const [speechLang, setSpeechLang] = useState<'en-US' | 'ur-PK'>('en-US');
+
   // Multi-file extraction & parsing state (PDF, Image OCR, Code, Text)
   const [isExtractingFile, setIsExtractingFile] = useState(false);
   const [extractStatus, setExtractStatus] = useState('');
@@ -279,12 +285,109 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
     }, 200);
   };
 
+  // Cleanup speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
+  const handleToggleSpeechLang = (lang: 'en-US' | 'ur-PK') => {
+    setSpeechLang(lang);
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      setIsListening(false);
+    }
+  };
+
   const handleSpeechToggle = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition is not supported in this browser.');
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setSpeechNotice('Voice dictation requires Google Chrome, Edge, or a browser with SpeechRecognition support.');
+      setTimeout(() => setSpeechNotice(null), 5000);
       return;
     }
-    setIsListening((prev) => !prev);
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          console.warn('Speech stop error:', e);
+        }
+      }
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      speechBaseTextRef.current = inputText;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = speechLang;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setSpeechNotice(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let currentTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          currentTranscript += event.results[i][0].transcript;
+        }
+
+        const base = speechBaseTextRef.current.trim();
+        const fullTranscript = currentTranscript.trim();
+        const combined = base
+          ? `${base} ${fullTranscript}`
+          : fullTranscript;
+
+        onInputChange(combined);
+
+        if (textareaRef.current) {
+          textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setSpeechNotice('Microphone permission blocked. Please allow microphone in browser.');
+          setIsListening(false);
+        } else if (event.error === 'no-speech') {
+          // keep listening
+        } else {
+          setSpeechNotice(`Microphone error: ${event.error}`);
+          setIsListening(false);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.error('Speech recognition start failed:', err);
+      setSpeechNotice('Could not start microphone. Please check permissions.');
+      setIsListening(false);
+      setTimeout(() => setSpeechNotice(null), 4000);
+    }
   };
 
   const triggerSummarize = (promptText?: string) => {
@@ -398,11 +501,11 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
       } else if (extractedFile) {
         triggerSummarize();
       } else {
-        // Empty state: check if it's a question or a long document
+        // Empty state: check if it's a question, topic, or a long document
         const isQuestion =
-          /^(what|who|where|when|why|how|can|could|is|are|tell|explain|summarize|kya|kon|kaise|kis|btao|batao|ap|tum|hi|hello|hey)\b|\?$/i.test(
+          /^(what|who|where|when|why|how|can|could|is|are|tell|explain|summarize|write|draft|create|generate|describe|discuss|give|note|essay|code|program|poem|story|banao|likho|batao|kya|kon|kaise|kis|ap|tum|hi|hello|hey)\b|\?$/i.test(
             trimmedInput
-          ) || trimmedInput.split(/\s+/).length < 25;
+          ) || trimmedInput.split(/\s+/).length < 35;
 
         if (isQuestion) {
           triggerAskQuestion();
@@ -423,8 +526,9 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
   };
 
   const hasSummary = Boolean(activeConversation?.currentSummary);
+  const hasMessages = Boolean(activeConversation?.messages && activeConversation.messages.length > 0);
   const userContent = activeConversation?.originalText || lastUserPrompt;
-  const showHero = !hasSummary && !isProcessing && !userContent;
+  const showHero = !hasSummary && !isProcessing && !userContent && !hasMessages;
 
   return (
     <div className="flex-1 flex flex-col justify-between max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-10">
@@ -477,8 +581,8 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
         ) : (
           /* When Summary or Processing or User Content is active: Display Result Stream */
           <div className="w-full space-y-6 animate-in fade-in duration-200">
-            {/* 1. PEHLE USER KA MESSAGE SHOW HO */}
-            {userContent && (
+            {/* 1. PEHLE USER KA MESSAGE SHOW HO (Only in Summary Mode where summary card is displayed) */}
+            {userContent && hasSummary && (
               <div className="flex justify-end w-full animate-in fade-in duration-200">
                 <div className="max-w-2xl w-full sm:w-auto bg-slate-900 text-white dark:bg-blue-600 rounded-2xl rounded-tr-xs p-4 sm:p-5 shadow-lg space-y-2.5">
                   <div className="flex items-center justify-between gap-3 text-xs text-slate-300 dark:text-blue-100 font-medium border-b border-white/10 pb-2">
@@ -525,29 +629,49 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               </div>
             )}
 
-            {/* 2. NEECHE RESULT MILA */}
-            {isProcessing ? (
-              <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-blue-500/30 dark:border-blue-500/20 p-6 shadow-xl space-y-4 animate-in fade-in">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                      Javeria AI is generating summary...
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      Running local inference on device without API keys
+            {/* 1b. Chat Processing State (when user asked a question and waiting for response) */}
+            {userContent && !hasSummary && isProcessing && (!activeConversation || activeConversation.messages.length === 0) && (
+              <div className="flex justify-end w-full animate-in fade-in duration-200">
+                <div className="max-w-2xl w-full sm:w-auto bg-slate-900 text-white dark:bg-blue-600 rounded-2xl rounded-tr-xs p-4 sm:p-5 shadow-lg space-y-2.5">
+                  <div className="flex items-center justify-between gap-3 text-xs text-slate-300 dark:text-blue-100 font-medium border-b border-white/10 pb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px] text-white">
+                        U
+                      </div>
+                      <span className="font-semibold text-white">You</span>
                     </div>
                   </div>
-                </div>
-                <div className="w-full bg-slate-100 dark:bg-white/5 h-2 rounded-full overflow-hidden">
-                  <div className="bg-blue-600 h-full rounded-full w-3/4 animate-pulse" />
+                  <div className="text-sm leading-relaxed text-slate-100 dark:text-blue-50 whitespace-pre-wrap select-text">
+                    {userContent}
+                  </div>
                 </div>
               </div>
-            ) : (
-              /* AI Assistant Output Card */
-              <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-slate-200 dark:border-white/10 p-5 sm:p-6 shadow-xl space-y-5 animate-in fade-in">
+            )}
+
+            {/* 2. DOCUMENT SUMMARY RESULT CARD - ONLY IN DOCUMENT SUMMARY MODE */}
+            {hasSummary && (
+              isProcessing ? (
+                <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-blue-500/30 dark:border-blue-500/20 p-6 shadow-xl space-y-4 animate-in fade-in">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Javeria AI is generating summary...
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Running local inference on device without API keys
+                      </div>
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-100 dark:bg-white/5 h-2 rounded-full overflow-hidden">
+                    <div className="bg-blue-600 h-full rounded-full w-3/4 animate-pulse" />
+                  </div>
+                </div>
+              ) : (
+                /* AI Assistant Output Card */
+                <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-slate-200 dark:border-white/10 p-5 sm:p-6 shadow-xl space-y-5 animate-in fade-in">
                 {/* Header bar: Tabs & Metrics */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-white/5 pb-4">
                 {/* Result Tabs */}
@@ -918,7 +1042,8 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                 </div>
               )}
             </div>
-          )}
+          )
+        )}
 
           {/* Quick Suggested Questions Chips */}
           {hasSummary && !isProcessing && (
@@ -949,18 +1074,36 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
           )}
 
           {/* Interactive Follow-Up Q&A Chat Messages Thread */}
-          {activeConversation?.messages && activeConversation.messages.filter((m) => m.type === 'followup' || (m.role === 'assistant' && m.type !== 'summary' && m.type !== 'paragraph')).length > 0 && (
+          {activeConversation?.messages && activeConversation.messages.filter((m) => {
+            if (hasSummary) {
+              if (m.type === 'summary' || m.type === 'paragraph' || m.type === 'original') return false;
+              if (m.content === activeConversation.currentSummary || m.content === userContent) {
+                return false;
+              }
+            }
+            return true;
+          }).length > 0 && (
             <div ref={chatThreadRef} className="space-y-4 pt-3 border-t border-slate-200/60 dark:border-white/5 scroll-mt-6">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-                <span>Q&A Chat Thread</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/40 dark:border-blue-900/40 font-mono">
-                  Local Engine • No API Keys
-                </span>
-              </div>
+              {hasSummary && (
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Q&A Chat Thread</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/40 dark:border-blue-900/40 font-mono">
+                    Local Engine • No API Keys
+                  </span>
+                </div>
+              )}
 
               {activeConversation.messages
-                .filter((m) => m.type === 'followup' || (m.role === 'assistant' && m.type !== 'summary' && m.type !== 'paragraph'))
+                .filter((m) => {
+                  if (hasSummary) {
+                    if (m.type === 'summary' || m.type === 'paragraph' || m.type === 'original') return false;
+                    if (m.content === activeConversation.currentSummary || m.content === userContent) {
+                      return false;
+                    }
+                  }
+                  return true;
+                })
                 .map((msg) => (
                   <div key={msg.id} className="w-full">
                     {msg.role === 'user' ? (
@@ -1006,18 +1149,18 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             </div>
           )}
 
-          {/* Follow-up Question Thinking Spinner */}
-          {isProcessing && hasSummary && (
+          {/* Question / Follow-up Thinking Spinner */}
+          {isProcessing && (
             <div className="flex justify-start w-full animate-in fade-in duration-150 pt-2">
               <div className="w-full rounded-2xl bg-white dark:bg-[#121620] border border-blue-200/70 dark:border-blue-500/20 p-4 shadow-sm flex items-center gap-3">
                 <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin shrink-0" />
                 <div className="space-y-0.5">
                   <p className="text-xs font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
-                    Javeria AI is answering your question...
+                    Javeria AI is thinking and writing your response...
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Grounded local analysis • 100% On-device privacy
+                    High-precision analysis • 100% On-device privacy
                   </p>
                 </div>
               </div>
@@ -1187,6 +1330,71 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
             </div>
           )}
 
+          {/* Voice Dictation Live Listening Banner */}
+          {isListening && (
+            <div className="flex items-center justify-between gap-2 p-2.5 px-3 mb-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-800/40 text-xs text-rose-800 dark:text-rose-200 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600"></span>
+                </span>
+                <span>
+                  <strong>Listening:</strong> Speak to type automatically into the box...
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-lg bg-white/80 dark:bg-black/40 p-0.5 border border-rose-200 dark:border-rose-900/50 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSpeechLang('en-US')}
+                    className={`px-2 py-0.5 rounded-md font-medium cursor-pointer transition-colors ${
+                      speechLang === 'en-US'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-rose-600'
+                    }`}
+                  >
+                    English
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSpeechLang('ur-PK')}
+                    className={`px-2 py-0.5 rounded-md font-medium cursor-pointer transition-colors ${
+                      speechLang === 'ur-PK'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-rose-600'
+                    }`}
+                  >
+                    اردو
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSpeechToggle}
+                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-medium text-[11px] shadow-xs cursor-pointer transition-all"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Voice Speech Notice / Permission Alert */}
+          {speechNotice && (
+            <div className="flex items-center justify-between p-2.5 px-3 mb-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-200 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <MicOff className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>{speechNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSpeechNotice(null)}
+                className="text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-white text-xs font-bold px-1.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Text Area */}
           <textarea
             ref={textareaRef}
@@ -1300,12 +1508,12 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
               <button
                 type="button"
                 onClick={handleSpeechToggle}
-                className={`p-2 rounded-xl transition-colors ${
+                className={`p-2 rounded-xl transition-all cursor-pointer ${
                   isListening
-                    ? 'text-rose-500 bg-rose-500/10 animate-pulse'
+                    ? 'text-white bg-rose-600 shadow-md animate-pulse ring-2 ring-rose-400'
                     : 'text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
                 }`}
-                title="Dictate with voice"
+                title={isListening ? 'Stop listening (Voice typing active)' : 'Speak to type / Voice dictation (English / اردو)'}
               >
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>

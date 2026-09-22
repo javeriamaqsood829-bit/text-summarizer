@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { MainChatWorkspace } from './components/MainChatWorkspace';
+import { HistoryView } from './components/HistoryView';
 import { TemplatesModal } from './components/TemplatesModal';
 import { ExploreModal } from './components/ExploreModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -33,6 +34,16 @@ const DEFAULT_SETTINGS: SummarySettings = {
 export default function App() {
   const { theme, setTheme, toggleTheme } = useTheme();
   const { modelInfo, loadModel, unloadModel, reloadModel } = useLocalModel();
+
+  const {
+    currentUser,
+    isAuthenticated,
+    guestUsageCount,
+    guestLimit,
+    isGuestLimitReached,
+    recordGuestUse,
+  } = useAuth();
+
   const {
     conversations,
     activeConversation,
@@ -45,7 +56,7 @@ export default function App() {
     renameConversation,
     deleteConversation,
     clearAllHistory,
-  } = useHistory();
+  } = useHistory(currentUser?.email);
 
   const {
     isProcessing,
@@ -70,14 +81,11 @@ export default function App() {
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const {
-    currentUser,
-    isAuthenticated,
-    guestUsageCount,
-    guestLimit,
-    isGuestLimitReached,
-    recordGuestUse,
-  } = useAuth();
+  // When active user account changes (login/logout), reset input text
+  useEffect(() => {
+    setInputText('');
+    setValidationError(null);
+  }, [currentUser?.email]);
 
   const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
     setAuthModalMode(mode);
@@ -375,7 +383,9 @@ export default function App() {
         onSelectNavTab={handleNavSelect}
         onSelectConversation={(id) => {
           setActiveConversationId(id);
+          setInputText('');
           setActiveNavTab('home');
+          setValidationError(null);
         }}
         onNewConversation={handleNewSummary}
         onSearchChange={setSearchQuery}
@@ -402,6 +412,7 @@ export default function App() {
           onOpenAuth={handleOpenAuth}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           onClearCurrentChat={handleNewSummary}
+          onOpenHistory={() => setActiveNavTab('history')}
         />
 
         {/* Validation or Engine Error Alert Banner */}
@@ -421,31 +432,53 @@ export default function App() {
           </div>
         )}
 
-        {/* Main Workspace (Hero with Iridescent Orb + Message Card + 3 Suggestion Cards) */}
+        {/* Main Workspace (Hero with Iridescent Orb + Message Card + 3 Suggestion Cards) OR Complete History View */}
         <main id="main-content" className="flex-1 flex flex-col justify-between overflow-y-auto">
-          <MainChatWorkspace
-            inputText={inputText}
-            onInputChange={(val) => {
-              setInputText(val);
-              setValidationError(null);
-            }}
-            statistics={statistics}
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
-            onSummarize={handleSummarize}
-            onConvertToParagraph={handleConvertToParagraph}
-            onLoadSample={handleLoadSample}
-            onLoadLengthyParagraph={handleLoadLengthyParagraph}
-            isProcessing={isProcessing}
-            activeConversation={activeConversation}
-            onFollowUp={handleFollowUp}
-            guestUsageCount={guestUsageCount}
-            guestLimit={guestLimit}
-            isGuestLimitReached={isGuestLimitReached}
-            isAuthenticated={isAuthenticated}
-            onOpenAuth={handleOpenAuth}
-            onAskQuestion={handleAskQuestion}
-          />
+          {activeNavTab === 'history' ? (
+            <HistoryView
+              conversations={conversations}
+              activeConversationId={activeConversationId}
+              currentUserEmail={currentUser?.email}
+              onSelectConversation={(id) => {
+                setActiveConversationId(id);
+                setInputText('');
+                setActiveNavTab('home');
+                setValidationError(null);
+              }}
+              onNewConversation={() => {
+                handleNewSummary();
+                setActiveNavTab('home');
+              }}
+              onRenameConversation={renameConversation}
+              onDeleteConversation={deleteConversation}
+              onClearAllHistory={clearAllHistory}
+              onBackToChat={() => setActiveNavTab('home')}
+            />
+          ) : (
+            <MainChatWorkspace
+              inputText={inputText}
+              onInputChange={(val) => {
+                setInputText(val);
+                setValidationError(null);
+              }}
+              statistics={statistics}
+              settings={settings}
+              onUpdateSettings={handleUpdateSettings}
+              onSummarize={handleSummarize}
+              onConvertToParagraph={handleConvertToParagraph}
+              onLoadSample={handleLoadSample}
+              onLoadLengthyParagraph={handleLoadLengthyParagraph}
+              isProcessing={isProcessing}
+              activeConversation={activeConversation}
+              onFollowUp={handleFollowUp}
+              guestUsageCount={guestUsageCount}
+              guestLimit={guestLimit}
+              isGuestLimitReached={isGuestLimitReached}
+              isAuthenticated={isAuthenticated}
+              onOpenAuth={handleOpenAuth}
+              onAskQuestion={handleAskQuestion}
+            />
+          )}
         </main>
       </div>
 

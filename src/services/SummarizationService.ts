@@ -77,6 +77,65 @@ export class SummarizationService {
 
     if (this.isCancelled) throw new Error('Summarization was cancelled by user.');
 
+    // Check if rawText is a prompt/instruction/topic request rather than a large document
+    const cleanRaw = rawText.trim();
+    const isTopicPrompt =
+      cleanRaw.length < 350 &&
+      /^(write|explain|tell|summarize|what|how|why|who|where|describe|draft|give|create|note on|essay on|batao|likho|kya hai)\b|\?$/i.test(
+        cleanRaw
+      );
+
+    if (isTopicPrompt) {
+      reportProgress('analyzing', 1, 0, 0, 25, 'Synthesizing response for your topic...');
+      try {
+        const resp = await fetch('/api/ai/gemini-summarize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: cleanRaw,
+            mode: settings.mode,
+            length: settings.length,
+            isInstruction: true,
+          }),
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data && data.summary && typeof data.summary === 'string' && data.summary.trim().length > 20) {
+            reportProgress('rewriting_paragraph', 1, 1, 1, 80, 'Formatting paragraphs...');
+            const finalSummary = data.summary.trim();
+            const paragraphVersion = await localModelService.paragraphRewrite(
+              finalSummary,
+              settings.paragraphCount
+            );
+            const processingTimeMs = Math.round(performance.now() - startTime);
+            reportProgress('completed', 1, 1, 1, 100, 'Generation complete!');
+
+            return {
+              summary: finalSummary,
+              paragraph: paragraphVersion,
+              chunks: [
+                {
+                  id: 'chunk_prompt_0',
+                  index: 0,
+                  sourceStart: 0,
+                  sourceEnd: cleanRaw.length,
+                  text: cleanRaw,
+                  estimatedTokens: Math.ceil(cleanRaw.length / 4),
+                  status: 'completed',
+                  summary: finalSummary,
+                },
+              ],
+              metrics: localModelService.evaluateQuality(cleanRaw, finalSummary),
+              processingTimeMs,
+            };
+          }
+        }
+      } catch (e) {
+        console.warn('Backend prompt summarization connection notice, falling back:', e);
+      }
+    }
+
     // STAGE 2: Chunking
     reportProgress('chunking', 0, 0, 0, 10, 'Segmenting text into semantic chunks...');
     const chunks = defaultTextChunker.chunkText(rawText, settings.chunkSize || 900);

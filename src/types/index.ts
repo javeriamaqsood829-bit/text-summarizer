@@ -119,6 +119,8 @@ export interface Conversation {
   metrics?: QualityMetrics;
   fileName?: string;
   fileType?: string;
+  userEmail?: string;
+  userId?: string;
 }
 
 export interface QualityMetrics {

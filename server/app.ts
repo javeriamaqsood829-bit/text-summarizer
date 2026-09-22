@@ -1105,8 +1105,9 @@ apiRouter.delete('/history', (req, res) => {
   return res.status(400).json({ error: 'id or all=true required' });
 });
 
-// Mount routes on /api
+// Mount routes on /api as well as root / so Vercel serverless rewrites seamlessly match
 app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 export default app;
 export { app };

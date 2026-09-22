@@ -199,7 +199,38 @@ npm run build
 ```
 Creates an optimized production bundle in `dist/`.
 
+---
+
+## 9. Deploying to Vercel via GitHub
+
+The project is fully pre-configured for **Vercel** with a native `vercel.json` file and serverless API integration.
+
+### Steps to Deploy:
+1. **Push to GitHub**:
+   ```bash
+   git add .
+   git commit -m "Configure Vercel deployment"
+   git push origin main
+   ```
+2. **Import into Vercel**:
+   - Go to [vercel.com](https://vercel.com) and log in.
+   - Click **Add New...** -> **Project**.
+   - Select your GitHub repository.
+3. **Project Settings (Auto-detected)**:
+   - **Framework Preset**: `Vite`
+   - **Root Directory**: `./`
+   - **Build Command**: `vite build` (pre-configured)
+   - **Output Directory**: `dist` (pre-configured)
+4. **Environment Variables (Optional)**:
+   - `GEMINI_API_KEY`: *(Optional)* If you want AI-assisted summarization on the server.
+   - `SMTP_USER`, `SMTP_PASS`, `SMTP_HOST`, `SMTP_PORT`: *(Optional)* For live verification emails.
+5. **Deploy**:
+   - Click **Deploy**. Vercel will build the frontend into CDN assets and automatically deploy `/api/index.ts` as a Serverless Function for all backend endpoints!
+
+---
+
 ### Keyboard Shortcuts
 - `Ctrl/Cmd + Enter`: Trigger Summarization
 - `Ctrl/Cmd + K`: Create New Summary
 - `Ctrl/Cmd + Shift + C`: Copy Current Summary Result
+

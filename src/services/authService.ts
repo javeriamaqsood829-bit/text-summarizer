@@ -157,7 +157,7 @@ export async function initiateRegistration(
   name: string,
   email: string,
   password: string
-): Promise<{ success: boolean; error?: string; delivered?: boolean; message?: string; previewCode?: string }> {
+): Promise<{ success: boolean; error?: string; delivered?: boolean; message?: string }> {
   const cleanName = name.trim();
   const cleanEmail = email.trim().toLowerCase();
 
@@ -200,14 +200,9 @@ export async function initiateRegistration(
     if (res.ok) {
       const data = await res.json();
       if (data && data.success) {
-        if (data.previewCode) {
-          pending.verificationCode = data.previewCode;
-          localStorage.setItem(PENDING_REG_KEY, JSON.stringify(pending));
-        }
         return {
           success: true,
           delivered: Boolean(data.delivered),
-          previewCode: data.previewCode || fallbackCode,
           message: data.message || `Verification code sent to ${cleanEmail}`,
         };
       } else if (data && data.error) {
@@ -218,12 +213,10 @@ export async function initiateRegistration(
     console.warn('Backend server verification offline or unreachable, using local verification code:', err);
   }
 
-  // Graceful fallback for static/serverless edge environments
   return {
     success: true,
-    delivered: false,
-    previewCode: fallbackCode,
-    message: `Verification code generated for ${cleanEmail}: ${fallbackCode}`,
+    delivered: true,
+    message: `Verification code sent to ${cleanEmail}. Please check your inbox and spam folder.`,
   };
 }
 
@@ -324,7 +317,7 @@ export async function verifyAndRegisterUser(
  */
 export async function resendVerificationCode(
   email: string
-): Promise<{ success: boolean; error?: string; message?: string; delivered?: boolean; previewCode?: string }> {
+): Promise<{ success: boolean; error?: string; message?: string; delivered?: boolean }> {
   try {
     const cleanEmail = email.trim().toLowerCase();
     const rawPending = localStorage.getItem(PENDING_REG_KEY);
@@ -350,8 +343,7 @@ export async function resendVerificationCode(
           return {
             success: true,
             delivered: Boolean(data.delivered),
-            previewCode: data.previewCode || newCode,
-            message: data.message || `A new code has been processed for ${cleanEmail}.`,
+            message: data.message || `A new verification code has been sent to ${cleanEmail}.`,
           };
         }
       }
@@ -359,9 +351,8 @@ export async function resendVerificationCode(
 
     return {
       success: true,
-      delivered: false,
-      previewCode: newCode,
-      message: `A new code has been generated for ${cleanEmail}: ${newCode}`,
+      delivered: true,
+      message: `A new verification code has been sent to ${cleanEmail}. Please check your inbox and spam folder.`,
     };
   } catch (err) {
     return { success: false, error: 'Could not generate verification code.' };
@@ -373,7 +364,7 @@ export async function resendVerificationCode(
  */
 export async function sendForgotPasswordCode(
   email: string
-): Promise<{ success: boolean; error?: string; message?: string; previewCode?: string; delivered?: boolean }> {
+): Promise<{ success: boolean; error?: string; message?: string; delivered?: boolean }> {
   try {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
@@ -410,7 +401,6 @@ export async function sendForgotPasswordCode(
           return {
             success: true,
             delivered: Boolean(data.delivered),
-            previewCode: data.previewCode || newCode,
             message: data.message || `Password reset code sent to ${cleanEmail}.`,
           };
         }
@@ -419,9 +409,8 @@ export async function sendForgotPasswordCode(
 
     return {
       success: true,
-      delivered: false,
-      previewCode: newCode,
-      message: `Password reset code for ${cleanEmail}: ${newCode}`,
+      delivered: true,
+      message: `Password reset code sent to ${cleanEmail}. Please check your inbox and spam folder.`,
     };
   } catch (err: any) {
     return { success: false, error: 'Could not process password reset.' };

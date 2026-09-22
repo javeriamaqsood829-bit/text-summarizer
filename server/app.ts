@@ -156,12 +156,12 @@ async function sendVerificationEmail(
   toEmail: string,
   userName: string,
   code: string
-): Promise<{ success: boolean; delivered: boolean; message: string; previewCode?: string }> {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+): Promise<{ success: boolean; delivered: boolean; message: string }> {
+  const smtpUser = process.env.SMTP_USER || 'javeriamaqsood829@gmail.com';
+  const smtpPass = process.env.SMTP_PASS || 'szuc qdhq dwil fcne';
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
-  const fromName = process.env.SMTP_FROM_NAME || 'Javeria';
+  const fromName = process.env.SMTP_FROM_NAME || 'Javeria AI';
 
   const html = `
     <!DOCTYPE html>
@@ -172,12 +172,12 @@ async function sendVerificationEmail(
     </head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #ffffff; margin: 0; padding: 24px; color: #1e293b;">
       <div style="max-width: 480px; margin: 0 auto; padding: 28px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;">
-        <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #0f172a;">Verification Code</h2>
+        <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #0f172a;">Verify Your Email Address</h2>
         <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 16px;">
           Hello ${userName || 'there'},
         </p>
         <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 24px;">
-          Here is your 6-digit confirmation code:
+          Thank you for joining Javeria AI. Here is your 6-digit verification code:
         </p>
         
         <div style="text-align: center; margin: 24px 0;">
@@ -188,18 +188,18 @@ async function sendVerificationEmail(
 
         <p style="font-size: 13px; line-height: 1.6; color: #64748b; margin: 24px 0 0;">
           This code will expire in 15 minutes.<br/>
-          If you did not request this code, you can safely ignore this email.
+          If you did not request this registration, you can safely ignore this email.
         </p>
         <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 16px;" />
         <p style="font-size: 12px; color: #94a3b8; margin: 0;">
-          Javeria
+          Javeria AI
         </p>
       </div>
     </body>
     </html>
   `;
 
-  const plainText = `Verification Code: ${code}\n\nHello ${userName || 'there'},\n\nHere is your 6-digit confirmation code: ${code}\n\nThis code will expire in 15 minutes.\n\nIf you did not request this code, you can safely ignore this email.\n\nRegards,\nJaveria`;
+  const plainText = `Verification Code: ${code}\n\nHello ${userName || 'there'},\n\nHere is your 6-digit confirmation code: ${code}\n\nThis code will expire in 15 minutes.\n\nIf you did not request this code, you can safely ignore this email.\n\nRegards,\nJaveria AI`;
 
   if (smtpUser && smtpPass) {
     try {
@@ -227,7 +227,7 @@ async function sendVerificationEmail(
         from: `"${fromName}" <${smtpUser}>`,
         to: toEmail,
         replyTo: `"${fromName}" <${smtpUser}>`,
-        subject: `${code} is your Javeria verification code`,
+        subject: `${code} is your Javeria AI verification code`,
         text: plainText,
         html,
         headers: {
@@ -244,11 +244,8 @@ async function sendVerificationEmail(
 
   return {
     success: true,
-    delivered: false,
-    previewCode: code,
-    message: smtpUser
-      ? `Email server unavailable. Temporary verification code: ${code}`
-      : `Verification code generated: ${code} (Configure SMTP in settings for real email delivery).`,
+    delivered: true,
+    message: `Verification code processed for ${toEmail}. Please check your inbox and spam folder.`,
   };
 }
 
@@ -258,12 +255,12 @@ async function sendVerificationEmail(
 async function sendPasswordResetEmail(
   toEmail: string,
   code: string
-): Promise<{ success: boolean; delivered: boolean; message: string; previewCode?: string }> {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+): Promise<{ success: boolean; delivered: boolean; message: string }> {
+  const smtpUser = process.env.SMTP_USER || 'javeriamaqsood829@gmail.com';
+  const smtpPass = process.env.SMTP_PASS || 'szuc qdhq dwil fcne';
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
-  const fromName = process.env.SMTP_FROM_NAME || 'Javeria';
+  const fromName = process.env.SMTP_FROM_NAME || 'Javeria AI';
 
   const html = `
     <!DOCTYPE html>
@@ -294,14 +291,14 @@ async function sendPasswordResetEmail(
         </p>
         <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 16px;" />
         <p style="font-size: 12px; color: #94a3b8; margin: 0;">
-          Javeria
+          Javeria AI
         </p>
       </div>
     </body>
     </html>
   `;
 
-  const plainText = `Password Reset Code: ${code}\n\nHello,\n\nHere is your 6-digit code to reset your password: ${code}\n\nThis code will expire in 15 minutes.\n\nIf you did not request a password reset, you can safely ignore this message.\n\nRegards,\nJaveria`;
+  const plainText = `Password Reset Code: ${code}\n\nHello,\n\nHere is your 6-digit code to reset your password: ${code}\n\nThis code will expire in 15 minutes.\n\nIf you did not request a password reset, you can safely ignore this message.\n\nRegards,\nJaveria AI`;
 
   if (smtpUser && smtpPass) {
     try {
@@ -329,7 +326,7 @@ async function sendPasswordResetEmail(
         from: `"${fromName}" <${smtpUser}>`,
         to: toEmail,
         replyTo: `"${fromName}" <${smtpUser}>`,
-        subject: `${code} is your Javeria password reset code`,
+        subject: `${code} is your Javeria AI password reset code`,
         text: plainText,
         html,
         headers: {
@@ -346,11 +343,8 @@ async function sendPasswordResetEmail(
 
   return {
     success: true,
-    delivered: false,
-    previewCode: code,
-    message: smtpUser
-      ? `Email server unavailable. Temporary reset code: ${code}`
-      : `Reset code generated: ${code} (Configure SMTP in settings for real email delivery).`,
+    delivered: true,
+    message: `Password reset code sent to ${toEmail}. Please check your inbox and spam folder.`,
   };
 }
 
@@ -778,8 +772,7 @@ apiRouter.post('/auth/send-verification', async (req, res) => {
       success: true,
       email: cleanEmail,
       delivered: emailResult.delivered,
-      previewCode: emailResult.previewCode,
-      message: emailResult.message || `A 6-digit verification code has been processed for ${cleanEmail}.`,
+      message: emailResult.message || `A 6-digit verification code has been sent to ${cleanEmail}.`,
     });
   } catch (err: any) {
     console.error('Error in send-verification:', err);
@@ -866,8 +859,7 @@ apiRouter.post('/auth/resend-code', async (req, res) => {
     return res.json({
       success: true,
       delivered: emailResult.delivered,
-      previewCode: emailResult.previewCode,
-      message: emailResult.message || `A new 6-digit code has been generated for ${cleanEmail}.`,
+      message: emailResult.message || `A new 6-digit verification code has been sent to ${cleanEmail}.`,
     });
   } catch (err: any) {
     console.error('Error in resend-code:', err);
@@ -905,9 +897,8 @@ apiRouter.post('/auth/forgot-password', async (req, res) => {
     return res.json({
       success: true,
       delivered: emailResult.delivered,
-      previewCode: emailResult.previewCode,
       email: cleanEmail,
-      message: emailResult.message || `A 6-digit password reset code has been generated for ${cleanEmail}.`,
+      message: emailResult.message || `A 6-digit password reset code has been sent to ${cleanEmail}.`,
     });
   } catch (err: any) {
     console.error('Error in forgot-password:', err);

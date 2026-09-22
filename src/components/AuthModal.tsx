@@ -140,12 +140,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setMode('verify');
         setResendTimer(60);
         setCanResend(false);
-        if (res.previewCode) {
-          setSuccessMessage(res.delivered ? `Verification code sent to ${email}` : `Verification code: ${res.previewCode}`);
-          setOtpDigits(res.previewCode.split(''));
-        } else {
-          setOtpDigits(['', '', '', '', '', '']);
-        }
+        setOtpDigits(['', '', '', '', '', '']);
+        setSuccessMessage(`Verification code sent to ${email}. Please check your email inbox and enter the 6 digits.`);
         setTimeout(() => {
           otpInputRefs.current[0]?.focus();
         }, 100);
@@ -237,13 +233,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setMode('reset-code');
         setResendTimer(60);
         setCanResend(false);
-        if (res.previewCode) {
-          setSuccessMessage(res.delivered ? `Security code sent to ${email}.` : `Reset code: ${res.previewCode}`);
-          setOtpDigits(res.previewCode.split(''));
-        } else {
-          setSuccessMessage(`A 6-digit security code has been sent to ${email}.`);
-          setOtpDigits(['', '', '', '', '', '']);
-        }
+        setSuccessMessage(`A 6-digit security code has been sent to ${email}. Please check your inbox and enter it below.`);
+        setOtpDigits(['', '', '', '', '', '']);
         setTimeout(() => {
           otpInputRefs.current[0]?.focus();
         }, 100);
@@ -330,13 +321,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (res.success) {
           setResendTimer(60);
           setCanResend(false);
-          if (res.previewCode) {
-            setOtpDigits(res.previewCode.split(''));
-            setSuccessMessage(res.delivered ? `New reset code sent to ${email}.` : `Reset code: ${res.previewCode}`);
-          } else {
-            setOtpDigits(['', '', '', '', '', '']);
-            setSuccessMessage(`New reset code sent to ${email}. Please check your inbox.`);
-          }
+          setOtpDigits(['', '', '', '', '', '']);
+          setSuccessMessage(`New reset code sent to ${email}. Please check your inbox.`);
           setTimeout(() => setSuccessMessage(null), 6000);
         } else {
           setError(res.error || 'Failed to resend reset code.');
@@ -347,13 +333,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (res.success) {
           setResendTimer(60);
           setCanResend(false);
-          if (res.previewCode) {
-            setOtpDigits(res.previewCode.split(''));
-            setSuccessMessage(res.delivered ? `New verification code sent to ${email}.` : `Verification code: ${res.previewCode}`);
-          } else {
-            setOtpDigits(['', '', '', '', '', '']);
-            setSuccessMessage(`New verification code sent to ${email}. Please check your inbox.`);
-          }
+          setOtpDigits(['', '', '', '', '', '']);
+          setSuccessMessage(`New verification code sent to ${email}. Please check your inbox.`);
           setTimeout(() => setSuccessMessage(null), 6000);
         } else {
           setError(res.error || 'Failed to resend code.');

@@ -14,32 +14,101 @@ export interface TextSection {
   endIndex: number;
 }
 
+export function cleanDocumentArtifacts(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/^\[(?:Image|Visual|PDF|Code|Text|Document)\s+Document:[^\]\n]+\]/gim, '')
+    .replace(/^---+\s*(?:Page\s*\d+|Document:[^-\n]+)\s*---+/gim, '')
+    .replace(/^•\s*(?:File Format|Resolution|Orientation|Visual Content Analysis|Summary Directive):[^\n]*/gim, '')
+    .trim();
+}
+
 export function splitIntoSentences(text: string): string[] {
   if (!text || text.trim().length === 0) return [];
 
+  // Strip technical headers and metadata
+  const sanitized = cleanDocumentArtifacts(text);
+
+  // Normalize paragraphs and soft line breaks from OCR / PDFs
+  const paragraphs = sanitized.split(/\n\s*\n+/);
+  const unwrappedParagraphs: string[] = [];
+
+  for (const para of paragraphs) {
+    const lines = para.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length <= 1) {
+      if (lines.length === 1) unwrappedParagraphs.push(lines[0]);
+      continue;
+    }
+
+    // If paragraph contains lists or headers or code, keep separate lines
+    const isListOrStructured = lines.some((l) => /^([*•\-–—+]|\d+[.)]|#{1,6}\s|[A-Z][\w\s]{1,30}:)/.test(l));
+    if (isListOrStructured) {
+      unwrappedParagraphs.push(lines.join('\n'));
+      continue;
+    }
+
+    // Check if line 1 is a standalone title/heading
+    let startIdx = 0;
+    let headingPart = '';
+    const firstLine = lines[0];
+    if (lines.length >= 2 && firstLine.length <= 60 && !/[.!?]$/.test(firstLine)) {
+      headingPart = firstLine;
+      startIdx = 1;
+    }
+
+    let body = '';
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i];
+      if (!body) {
+        body = line;
+      } else if (body.endsWith('-')) {
+        body = body.slice(0, -1) + line;
+      } else {
+        body += ' ' + line;
+      }
+    }
+
+    if (headingPart) {
+      unwrappedParagraphs.push(headingPart);
+    }
+    if (body) {
+      unwrappedParagraphs.push(body);
+    }
+  }
+
+  const normalizedText = unwrappedParagraphs.join('\n\n');
+
   // Protect common abbreviations from premature splitting
-  const protectedText = text
+  const protectedText = normalizedText
     .replace(/\b(e\.g\.|i\.e\.|etc\.|vs\.|al\.|approx\.|fig\.|dr\.|prof\.|mr\.|mrs\.|ms\.)/gi, (m) =>
       m.replace(/\./g, '___DOT___')
     )
     .replace(/(\d+)\.(\d+)/g, '$1___DEC___$2'); // decimal numbers like 3.14
 
-  // Match sentences ending in punctuation (. ! ?) followed by whitespace or end of string
-  const sentenceRegex = /([^.!?\n]+[.!?]+(?:["'”’)]?)|[^.!?\n]+$)/g;
-  const rawMatches = protectedText.match(sentenceRegex) || [protectedText];
+  // Match sentences ending in punctuation (. ! ?) followed by whitespace or bullet/paragraph break
+  const rawParts = protectedText
+    .split(/(?<=[.!?]["'”’)]?)\s+(?=[A-Z0-9"“'‘(])|\n\s*\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const sentences: string[] = [];
-  for (const raw of rawMatches) {
-    const restored = raw
-      .replace(/___DOT___/g, '.')
-      .replace(/___DEC___/g, '.')
-      .trim();
-    if (restored.length > 0) {
-      sentences.push(restored);
+  for (const part of rawParts) {
+    const subLines = part.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    for (const sub of subLines) {
+      const restored = sub
+        .replace(/___DOT___/g, '.')
+        .replace(/___DEC___/g, '.')
+        .replace(/^["'“”‘]\s*(and|or|to|for|with|of|in|that|this)\b/gim, '$1') // clean stray leading quote
+        .trim();
+
+      // Skip isolated noise or empty strings
+      if (restored.length > 5 && !/^[[\]{}()~`^|—_=+]{1,4}$/.test(restored)) {
+        sentences.push(restored);
+      }
     }
   }
 
-  return sentences.length > 0 ? sentences : [text.trim()];
+  return sentences.length > 0 ? sentences : [sanitized || text.trim()];
 }
 
 export function isHeading(line: string): boolean {

@@ -150,7 +150,7 @@ export async function initiateRegistration(
   name: string,
   email: string,
   password: string
-): Promise<{ success: boolean; error?: string; delivered?: boolean; message?: string }> {
+): Promise<{ success: boolean; error?: string; delivered?: boolean; message?: string; previewCode?: string }> {
   const cleanName = name.trim();
   const cleanEmail = email.trim().toLowerCase();
 
@@ -197,6 +197,7 @@ export async function initiateRegistration(
     return {
       success: true,
       delivered: data.delivered,
+      previewCode: data.previewCode,
       message: data.message,
     };
   } catch (err: any) {
@@ -272,7 +273,7 @@ export async function verifyAndRegisterUser(
  */
 export async function resendVerificationCode(
   email: string
-): Promise<{ success: boolean; error?: string; message?: string }> {
+): Promise<{ success: boolean; error?: string; message?: string; delivered?: boolean; previewCode?: string }> {
   try {
     const cleanEmail = email.trim().toLowerCase();
     const res = await fetch('/api/auth/resend-code', {
@@ -288,6 +289,8 @@ export async function resendVerificationCode(
 
     return {
       success: true,
+      delivered: data.delivered,
+      previewCode: data.previewCode,
       message: data.message || `A new code has been sent to ${cleanEmail}.`,
     };
   } catch (err) {
@@ -300,7 +303,7 @@ export async function resendVerificationCode(
  */
 export async function sendForgotPasswordCode(
   email: string
-): Promise<{ success: boolean; error?: string; message?: string }> {
+): Promise<{ success: boolean; error?: string; message?: string; previewCode?: string; delivered?: boolean }> {
   try {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
@@ -329,6 +332,8 @@ export async function sendForgotPasswordCode(
 
     return {
       success: true,
+      delivered: data.delivered,
+      previewCode: data.previewCode,
       message: data.message || `Password reset code has been sent to ${cleanEmail}.`,
     };
   } catch (err: any) {

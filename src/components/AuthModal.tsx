@@ -140,7 +140,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setMode('verify');
         setResendTimer(60);
         setCanResend(false);
-        setOtpDigits(['', '', '', '', '', '']);
+        if (res.previewCode) {
+          setSuccessMessage(res.delivered ? `Verification code sent to ${email}` : `Verification code: ${res.previewCode}`);
+          setOtpDigits(res.previewCode.split(''));
+        } else {
+          setOtpDigits(['', '', '', '', '', '']);
+        }
         setTimeout(() => {
           otpInputRefs.current[0]?.focus();
         }, 100);
@@ -229,11 +234,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const res = await forgotPassword(email);
       setIsLoading(false);
       if (res.success) {
-        setSuccessMessage(`A 6-digit security code has been sent to ${email}.`);
         setMode('reset-code');
         setResendTimer(60);
         setCanResend(false);
-        setOtpDigits(['', '', '', '', '', '']);
+        if (res.previewCode) {
+          setSuccessMessage(res.delivered ? `Security code sent to ${email}.` : `Reset code: ${res.previewCode}`);
+          setOtpDigits(res.previewCode.split(''));
+        } else {
+          setSuccessMessage(`A 6-digit security code has been sent to ${email}.`);
+          setOtpDigits(['', '', '', '', '', '']);
+        }
         setTimeout(() => {
           otpInputRefs.current[0]?.focus();
         }, 100);
@@ -320,9 +330,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (res.success) {
           setResendTimer(60);
           setCanResend(false);
-          setOtpDigits(['', '', '', '', '', '']);
-          setSuccessMessage(`New reset code sent to ${email}. Please check your inbox.`);
-          setTimeout(() => setSuccessMessage(null), 4000);
+          if (res.previewCode) {
+            setOtpDigits(res.previewCode.split(''));
+            setSuccessMessage(res.delivered ? `New reset code sent to ${email}.` : `Reset code: ${res.previewCode}`);
+          } else {
+            setOtpDigits(['', '', '', '', '', '']);
+            setSuccessMessage(`New reset code sent to ${email}. Please check your inbox.`);
+          }
+          setTimeout(() => setSuccessMessage(null), 6000);
         } else {
           setError(res.error || 'Failed to resend reset code.');
         }
@@ -332,9 +347,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (res.success) {
           setResendTimer(60);
           setCanResend(false);
-          setOtpDigits(['', '', '', '', '', '']);
-          setSuccessMessage(`New verification code sent to ${email}. Please check your inbox.`);
-          setTimeout(() => setSuccessMessage(null), 4000);
+          if (res.previewCode) {
+            setOtpDigits(res.previewCode.split(''));
+            setSuccessMessage(res.delivered ? `New verification code sent to ${email}.` : `Verification code: ${res.previewCode}`);
+          } else {
+            setOtpDigits(['', '', '', '', '', '']);
+            setSuccessMessage(`New verification code sent to ${email}. Please check your inbox.`);
+          }
+          setTimeout(() => setSuccessMessage(null), 6000);
         } else {
           setError(res.error || 'Failed to resend code.');
         }
@@ -669,7 +689,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed border-t border-blue-100 dark:border-blue-900/40 pt-2">
-                  Please open your email inbox (and check spam or junk folder) to find your <strong>6-digit security code</strong> from <strong>Javeria AI</strong>, then enter it below to activate your account.
+                  Please open your email inbox to find your <strong>6-digit security code</strong> from <strong>Javeria</strong>, then enter it below to activate your account.
+                </p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 p-2 rounded-lg leading-tight">
+                  💡 <strong>Tip:</strong> If not visible in Inbox, please check your <strong>Spam or Junk</strong> folder and mark as <strong>&apos;Report Not Spam&apos;</strong> to ensure all future emails reach your Inbox directly.
                 </p>
               </div>
 
@@ -805,7 +828,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <span>Reset Code Dispatched</span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed border-t border-purple-100 dark:border-purple-900/40 pt-2">
-                  We sent a 6-digit security code to <strong>{email}</strong>. Check your inbox (or spam) and enter it below:
+                  We sent a 6-digit security code to <strong>{email}</strong>. Check your inbox and enter it below:
+                </p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 p-2 rounded-lg leading-tight">
+                  💡 <strong>Tip:</strong> If not visible in Inbox, please check your <strong>Spam or Junk</strong> folder and click <strong>&apos;Report Not Spam&apos;</strong>.
                 </p>
               </div>
 

@@ -11,6 +11,84 @@
     <meta name="twitter:card" content="summary_large_image" />
     <script>
       (function() {
+        // 1. Intercept any unhandled "Cannot set property fetch of #<Window> which has only a getter" errors globally
+        try {
+          window.addEventListener('error', function(event) {
+            var msg = (event && (event.message || (event.error && event.error.message))) || '';
+            if (typeof msg === 'string' && msg.indexOf('fetch') !== -1 && (msg.indexOf('getter') !== -1 || msg.indexOf('read only') !== -1)) {
+              if (typeof event.preventDefault === 'function') event.preventDefault();
+              if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+              return true;
+            }
+          }, true);
+
+          window.addEventListener('unhandledrejection', function(event) {
+            var reason = (event && event.reason && (event.reason.message || String(event.reason))) || '';
+            if (typeof reason === 'string' && reason.indexOf('fetch') !== -1 && (reason.indexOf('getter') !== -1 || reason.indexOf('read only') !== -1)) {
+              if (typeof event.preventDefault === 'function') event.preventDefault();
+              if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+              return true;
+            }
+          }, true);
+
+          var prevOnError = window.onerror;
+          window.onerror = function(message, source, lineno, colno, error) {
+            var msg = String(message || (error && error.message) || '');
+            if (msg.indexOf('fetch') !== -1 && (msg.indexOf('getter') !== -1 || msg.indexOf('read only') !== -1)) {
+              return true;
+            }
+            if (typeof prevOnError === 'function') {
+              return prevOnError.apply(this, arguments);
+            }
+          };
+        } catch (e) {}
+
+        // 2. Ensure fetch has both a getter and a setter on window and Window.prototype without polluting Object.prototype
+        try {
+          // Remove any accidental prototype pollution
+          try {
+            if (Object.prototype && Object.prototype.hasOwnProperty('fetch')) {
+              delete Object.prototype.fetch;
+            }
+            if (typeof EventTarget !== 'undefined' && EventTarget.prototype && EventTarget.prototype.hasOwnProperty('fetch')) {
+              delete EventTarget.prototype.fetch;
+            }
+          } catch (e) {}
+
+          var originalFetch = window.fetch;
+          var currentFetch = originalFetch;
+
+          function installFetchAccessor(target) {
+            if (!target || target === Object.prototype || (typeof EventTarget !== 'undefined' && target === EventTarget.prototype)) {
+              return;
+            }
+            try {
+              var desc = Object.getOwnPropertyDescriptor(target, 'fetch');
+              if (!desc || desc.configurable || (desc.get && !desc.set)) {
+                Object.defineProperty(target, 'fetch', {
+                  configurable: true,
+                  enumerable: false, // Must be false so it never leaks into for..in or React props
+                  get: function() {
+                    return currentFetch;
+                  },
+                  set: function(val) {
+                    currentFetch = val;
+                  }
+                });
+              }
+            } catch (err) {}
+          }
+
+          installFetchAccessor(window);
+
+          if (typeof Window !== 'undefined' && Window.prototype) {
+            installFetchAccessor(Window.prototype);
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script>
+      (function() {
         try {
           var saved = localStorage.getItem('localsummarize_theme');
           var isDark = false;

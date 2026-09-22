@@ -6,7 +6,7 @@ import {
   ParagraphOption,
   QualityMetrics,
 } from '../types';
-import { splitIntoSentences, estimateTokens, isHeading } from '../utils/tokenEstimator';
+import { splitIntoSentences, estimateTokens, isHeading, cleanDocumentArtifacts } from '../utils/tokenEstimator';
 
 export class LocalModelService {
   private static instance: LocalModelService;
@@ -287,32 +287,30 @@ export class LocalModelService {
   ): Promise<string> {
     await new Promise((resolve) => setTimeout(resolve, 60));
 
-    const sourceContent = currentSummary && currentSummary.trim().length > 0 ? currentSummary : originalText;
-    const baseSentences = splitIntoSentences(sourceContent).filter((s) => s.trim().length > 15);
+    // Prefer originalText if available to get the full richness of the source document
+    const rawSource = originalText && originalText.trim().length > 0 ? originalText : currentSummary;
+    const cleanSource = cleanDocumentArtifacts(rawSource);
+    const sourceSentences = splitIntoSentences(cleanSource).filter((s) => s.trim().length > 10);
+
+    // If source has very few sentences, fallback to current summary sentences
+    const sentences = sourceSentences.length >= 2
+      ? sourceSentences
+      : splitIntoSentences(cleanDocumentArtifacts(currentSummary)).filter((s) => s.trim().length > 10);
 
     switch (operation) {
       case 'shorter': {
-        // Clean out section labels and extract the 2-3 most essential sentences
-        const cleanedLines = sourceContent
-          .split('\n')
-          .map((l) => l.trim().replace(/^[\d.•*\-#\s]+/, ''))
-          .filter((l) => l.length > 20 && !l.toLowerCase().includes('thesis') && !l.toLowerCase().includes('conclusion'));
-        
-        const candidateSentences = cleanedLines.length >= 2 ? cleanedLines : baseSentences;
-        const scored = this.scoreSentences(candidateSentences, sourceContent, 'quick');
+        const scored = this.scoreSentences(sentences, cleanSource, 'quick');
         const selected = scored.slice(0, Math.min(3, scored.length)).sort((a, b) => a.index - b.index);
 
         return [
           '### ⚡ Ultra-Condensed Summary',
-          ...selected.map((s, idx) => `• **Point ${idx + 1}**: ${s.text}`),
+          ...selected.map((s, idx) => `• **Key Point ${idx + 1}**: ${s.text.replace(/^[•*\-\d.]\s*/, '')}`),
         ].join('\n\n');
       }
 
       case 'key_points': {
-        const fullSource = originalText && originalText.trim().length > 0 ? originalText : sourceContent;
-        const allSentences = splitIntoSentences(fullSource).filter((s) => s.trim().length > 20);
-        const scored = this.scoreSentences(allSentences, fullSource, 'key_points');
-        const topPoints = scored.slice(0, Math.min(5, allSentences.length));
+        const scored = this.scoreSentences(sentences, cleanSource, 'key_points');
+        const topPoints = scored.slice(0, Math.min(5, sentences.length)).sort((a, b) => a.index - b.index);
 
         return [
           '### 📌 Core Key Takeaways',
@@ -322,9 +320,7 @@ export class LocalModelService {
 
       case 'simpler': {
         // Genuine simplification into easy-to-understand, friendly English
-        const fullSource = originalText && originalText.trim().length > 0 ? originalText : sourceContent;
-        const sentences = splitIntoSentences(fullSource).filter((s) => s.trim().length > 20);
-        const scored = this.scoreSentences(sentences, fullSource, 'balanced');
+        const scored = this.scoreSentences(sentences, cleanSource, 'balanced');
         const corePoints = scored.slice(0, Math.min(4, scored.length));
 
         const simplifyWord = (txt: string) => {
@@ -344,7 +340,21 @@ export class LocalModelService {
             .replace(/\b(ubiquitous)\b/gi, 'found everywhere');
         };
 
-        const simplifiedMain = simplifyWord(corePoints[0]?.text || sourceContent.slice(0, 150));
+        const mainSentence = sentences[0] || corePoints[0]?.text || cleanSource.slice(0, 150);
+        const simplifiedMain = simplifyWord(mainSentence.replace(/^[•*\-\d.]\s*/, ''));
+
+        const bulletTexts = corePoints.length > 1
+          ? corePoints.slice(1).map((c) => c.text)
+          : sentences.slice(1, 4);
+
+        const keyBullets = bulletTexts.map(
+          (txt) => `• ${simplifyWord(txt.replace(/^[•*\-\d.]\s*/, ''))}`
+        );
+
+        const conclusionCandidate = sentences[sentences.length - 1];
+        const inShortText = conclusionCandidate && conclusionCandidate !== mainSentence
+          ? simplifyWord(conclusionCandidate.replace(/^[•*\-\d.]\s*/, ''))
+          : 'Understanding these fundamentals helps you grasp the main ideas and apply them effectively.';
 
         return [
           '### 💡 In Plain & Simple English',
@@ -352,17 +362,15 @@ export class LocalModelService {
           simplifiedMain,
           '',
           '**Key things to know:**',
-          ...corePoints.slice(1).map((cp) => `• ${simplifyWord(cp.text.replace(/^[•*\-\d.]\s*/, ''))}`),
+          ...keyBullets,
           '',
-          '**In short:** This concept explains how systems process data step-by-step to learn patterns and solve problems without unnecessary complexity.'
+          `**In short:** ${inShortText}`,
         ].join('\n');
       }
 
       case 'detailed': {
-        const fullSource = originalText && originalText.trim().length > 0 ? originalText : sourceContent;
-        const origSentences = splitIntoSentences(fullSource).filter((s) => s.trim().length > 15);
-        const count = Math.min(origSentences.length, 10);
-        const scored = this.scoreSentences(origSentences, fullSource, 'detailed');
+        const count = Math.min(sentences.length, 8);
+        const scored = this.scoreSentences(sentences, cleanSource, 'detailed');
         const selected = scored.slice(0, count).sort((a, b) => a.index - b.index);
 
         return [
@@ -372,9 +380,13 @@ export class LocalModelService {
       }
 
       case 'terms': {
-        const terms = this.extractImportantTerms(originalText || sourceContent);
+        const terms = this.extractImportantTerms(cleanSource);
         if (terms.length === 0) {
-          return '### 🔍 Key Terminology\n\n• No specialized technical terminology detected in this document.';
+          const candidateTerms = sentences.slice(0, 3).map((s, i) => {
+            const firstWords = s.split(/\s+/).slice(0, 3).join(' ');
+            return `• **Core Concept ${i + 1} (${firstWords})**: ${s.replace(/^[•*\-\d.]\s*/, '')}`;
+          });
+          return ['### 🔍 Key Terminology & Concepts', ...candidateTerms].join('\n\n');
         }
         return [
           '### 🔍 Key Terminology & Definitions',
@@ -383,8 +395,7 @@ export class LocalModelService {
       }
 
       case 'executive': {
-        const origSentences = splitIntoSentences(sourceContent);
-        return this.formatSummarizedContent(origSentences.slice(0, 6), 'executive');
+        return this.formatSummarizedContent(sentences.slice(0, 6), 'executive');
       }
 
       default:
@@ -472,10 +483,10 @@ export class LocalModelService {
     return (
       text.startsWith('[Image Document:') ||
       text.startsWith('[Visual Document:') ||
+      text.startsWith('Visual Asset:') ||
       text.includes('• Visual Content Analysis:') ||
-      text.includes('• Orientation: 1:') ||
-      text.includes('• Orientation: 1.') ||
-      text.includes('• Resolution:')
+      text.includes('functions as a visual diagram') ||
+      text.includes('functions as an image, diagram, or graphic')
     );
   }
 
@@ -484,8 +495,8 @@ export class LocalModelService {
    */
   private summarizeImageContent(text: string, mode: SummaryMode, length: SummaryLength): string {
     // Extract metadata header if present
-    const headerMatch = text.match(/\[(Image Document|Visual Document):?\s*([^\]]+)\]/i);
-    const docName = headerMatch ? headerMatch[2].trim() : 'Uploaded Image';
+    const headerMatch = text.match(/(?:\[(?:Image|Visual) Document:?|Visual Asset:?)\s*([^\]\n]+)/i);
+    const docName = headerMatch ? headerMatch[1].trim() : 'Uploaded Image';
 
     // Extract raw text lines without headers
     const lines = text
@@ -511,33 +522,19 @@ export class LocalModelService {
     const transcribedContent = textLines.join('\n');
     const wordCount = transcribedContent.split(/\s+/).filter(Boolean).length;
 
-    // Case A: Image has actual recognized text
+    // Case A: Image has actual recognized text (handwriting, printed text, notes, slides, documents)
     if (wordCount >= 3) {
       const sentences = splitIntoSentences(transcribedContent);
 
-      // Detect document title / main subject from the first line or prominent theme
-      let docTitle = 'Visual Document';
-      if (textLines.length > 0) {
-        const firstLine = textLines[0].replace(/^#+\s*/, '').replace(/[*•\-–—_]/g, '').trim();
-        if (firstLine.length >= 3 && firstLine.length <= 60 && !/[.!?]$/.test(firstLine)) {
-          docTitle = firstLine;
-        } else if (/\bgenerative\s+ai\b/i.test(transcribedContent)) {
-          docTitle = 'Generative AI Fundamentals';
-        } else if (/\bartificial\s+intelligence\b/i.test(transcribedContent)) {
-          docTitle = 'Artificial Intelligence Overview';
-        } else {
-          docTitle = docName.replace(/\.[a-zA-Z0-9]+$/, '').replace(/[-_]/g, ' ');
-        }
-      }
-
-      // Check if it is a code screenshot
-      const isCodeScreenshot = /\b(import\s+|export\s+|function\s+|const\s+|class\s+|return\s+|def\s+|var\s+|let\s+)\b/.test(transcribedContent) &&
-        !/\b(generative ai|artificial intelligence|machine learning)\b/i.test(transcribedContent);
+      // Check if it is a source code screenshot
+      const isCodeScreenshot =
+        /\b(import\s+|export\s+|function\s+|const\s+|class\s+|return\s+|def\s+|var\s+|let\s+)\b/.test(transcribedContent) &&
+        !/\b(generative ai|artificial intelligence|machine learning|deep learning)\b/i.test(transcribedContent);
 
       if (isCodeScreenshot) {
         return (
-          `### Code Document Summary: ${docTitle}\n\n` +
-          `**Document Classification:** Source code snippet extracted via optical analysis.\n\n` +
+          `### Code Screenshot Summary: ${docName}\n\n` +
+          `**Document Classification:** Source code extracted via optical analysis.\n\n` +
           `**Extracted Logic & Syntax:**\n` +
           `\`\`\`\n${textLines.slice(0, 15).join('\n')}\n\`\`\`\n\n` +
           `**Technical Overview:**\n` +
@@ -545,68 +542,12 @@ export class LocalModelService {
         );
       }
 
-      // Semantic categorization for study notes & informational documents
-      const isGenerativeAiDocument = /\b(generative\s+ai|generative\s+artificial\s+intelligence|llms?|large\s+language\s+models?)\b/i.test(transcribedContent);
-
-      if (isGenerativeAiDocument) {
-        if (mode === 'key_points') {
-          return (
-            `### Key Points: ${docTitle}\n\n` +
-            `• **Core Definition:** Generative Artificial Intelligence (Generative AI) is an advanced technology enabling computers to create new content—including text, images, audio, video, and code—from user instructions called prompts, unlike traditional AI that primarily analyzes data.\n` +
-            `• **Underlying Technologies:** Built upon machine learning, deep learning, and neural networks that learn patterns from large datasets. Large Language Models (LLMs) are central components for understanding and producing human language.\n` +
-            `• **Practical Capabilities:** Powers tools to write articles, summarize documents, translate languages, answer questions, and generate programming code.\n` +
-            `• **Industry Applications:** Widely adopted in education, healthcare, enterprise business, digital marketing, cybersecurity, and creative industries.\n` +
-            `• **Limitations & Ethics:** Carries critical risks including inaccurate information (hallucinations), biased responses, and privacy issues, requiring strictly responsible and ethical deployment.\n` +
-            `• **Future Impact:** Mastering generative AI fundamentals is essential for students and professionals to effectively use this technology and explore new opportunities.`
-          );
-        }
-
-        if (mode === 'quick') {
-          return (
-            `### Summary: ${docTitle}\n\n` +
-            `Generative AI is a modern technology that enables computers to create new content such as text, images, audio, video, and programming code based on user prompts. Built on neural networks, machine learning, and Large Language Models (LLMs), it assists across education, healthcare, and business, but requires responsible and ethical use to mitigate risks of inaccuracies and bias.`
-          );
-        }
-
-        return (
-          `### Summary: ${docTitle}\n\n` +
-          `**1. Core Definition & Overview:**\n` +
-          `Generative Artificial Intelligence (Generative AI) is a modern technology that allows computers to create new content, including text, images, audio, video, and computer code. Unlike traditional AI systems that mainly analyze existing data or make predictions, Generative AI produces original outputs based on user instructions known as prompts.\n\n` +
-          `**2. Underlying Technologies & LLMs:**\n` +
-          `• Powered by machine learning, deep learning, and neural networks trained on large volumes of data to discover and replicate patterns.\n` +
-          `• Large Language Models (LLMs) represent a foundational component of Generative AI, enabling systems to understand and generate natural human language.\n\n` +
-          `**3. Practical Capabilities & Industry Applications:**\n` +
-          `• Tools based on Generative AI assist users with writing articles, summarizing documents, translating languages, answering questions, and generating programming code.\n` +
-          `• Extensively deployed across education, healthcare, enterprise business, digital marketing, cybersecurity, and creative industries.\n\n` +
-          `**4. Critical Limitations & Ethical Imperatives:**\n` +
-          `• Exhibits important limitations, including inaccurate information (hallucinations), biased responses, and data privacy risks.\n` +
-          `• Must be used responsibly, ethically, and with appropriate validation.\n\n` +
-          `**5. Key Takeaways & Future Outlook:**\n` +
-          `Understanding Generative AI fundamentals equips students and professionals to utilize this technology effectively and explore new opportunities in the future.`
-        );
-      }
-
-      // General Document / Study Notes Image
+      // General Document / Study Notes / Hand-written or Printed Image
       const scored = this.scoreSentences(sentences, transcribedContent, mode);
       const topCount = Math.max(3, Math.min(sentences.length, length === 'short' ? 3 : length === 'long' ? 8 : 5));
       const selected = scored.slice(0, topCount).sort((a, b) => a.index - b.index);
 
-      if (mode === 'key_points') {
-        const points = selected.map((s) => `• ${s.text.replace(/^[*•\-–—]\s*/, '')}`);
-        return `### Key Takeaways: ${docTitle}\n\n${points.join('\n\n')}`;
-      }
-
-      const p1 = selected.slice(0, Math.ceil(selected.length / 2)).map((s) => s.text).join(' ');
-      const p2 = selected.slice(Math.ceil(selected.length / 2)).map((s) => s.text).join(' ');
-
-      return (
-        `### Document Summary: ${docTitle}\n\n` +
-        `**1. Executive Overview:**\n` +
-        `${p1}\n\n` +
-        (p2 ? `**2. Key Insights & Details:**\n${p2}\n\n` : '') +
-        `**3. Core Takeaways:**\n` +
-        selected.slice(0, 4).map((s) => `• ${s.text.replace(/^[*•\-–—]\s*/, '')}`).join('\n')
-      );
+      return this.formatSummarizedContent(selected.map((s) => s.text), mode);
     }
 
     // Case B: Image with no or minimal text (photo, diagram, graphic)

@@ -123,7 +123,7 @@ export class FileExtractorService {
           .join(' ');
 
         if (pageItems.trim().length > 0) {
-          pageTexts.push(`--- Page ${i} ---\n${pageItems.trim()}`);
+          pageTexts.push(this.unwrapParagraphLines(pageItems.trim()));
         }
       }
 
@@ -148,7 +148,7 @@ export class FileExtractorService {
               const ret = await worker.recognize(canvas);
               await worker.terminate();
               if (ret?.data?.text?.trim()) {
-                ocrPages.push(`--- Page ${p} (Scanned OCR) ---\n${ret.data.text.trim()}`);
+                ocrPages.push(this.cleanOcrText(ret.data.text.trim()));
               }
             }
           }
@@ -161,7 +161,7 @@ export class FileExtractorService {
       }
 
       if (!combinedText || combinedText.length < 5) {
-        combinedText = `--- Document: ${file.name} ---\nThis PDF document has ${numPages} page(s). It contains visual or graphical elements without extractable font characters.`;
+        combinedText = `This PDF document (${file.name}) contains ${numPages} page(s) of visual graphics or scans without extractable characters.`;
       }
 
       const wordCount = combinedText.split(/\s+/).filter(Boolean).length;
@@ -370,20 +370,14 @@ export class FileExtractorService {
     const wordCount = cleanedText.split(/\s+/).filter(Boolean).length;
 
     if (wordCount >= 3) {
-      // Meaningful text was recognized
-      finalContent = `[Image Document: ${file.name} • ${meta.width > 0 ? `${meta.width}x${meta.height}` : `${meta.format}`} • ${meta.sizeKB} KB]\n\n${cleanedText}`;
+      // Return the pure transcribed document text directly
+      finalContent = cleanedText;
     } else {
       // Image has very few or no words (e.g. photo, illustration, diagram, logo)
-      finalContent = `[Image Document: ${file.name}]\n` +
-        `• File Format: ${meta.format} (${meta.sizeKB} KB)\n` +
-        `• Resolution: ${meta.width > 0 ? `${meta.width} x ${meta.height} px` : 'Standard'}\n` +
-        `• Orientation: ${meta.aspectRatio}\n` +
-        `• Visual Content Analysis: This visual document is an image or photo. ${
-          cleanedText
-            ? `Detected visual text fragments: "${cleanedText}".`
-            : 'No printed textual paragraphs were detected. It functions as a visual diagram, illustration, or graphic.'
-        }\n` +
-        `• Summary Directive: Provide a clear structured breakdown and descriptive overview of this visual document asset.`;
+      finalContent =
+        `Visual Asset: ${file.name} (${meta.format}, ${meta.sizeKB} KB).\n` +
+        (cleanedText ? `Detected text fragments: "${cleanedText}".\n` : '') +
+        `This visual document functions as an image, diagram, or graphic without continuous printed body text.`;
     }
 
     const finalWords = finalContent.split(/\s+/).filter(Boolean).length;
@@ -398,12 +392,60 @@ export class FileExtractorService {
   }
 
   /**
+   * Unwraps soft line breaks within paragraphs so sentences are complete and coherent,
+   * while preserving headings, bullet points, numbered lists, and blank-line separated paragraphs.
+   */
+  public static unwrapParagraphLines(raw: string): string {
+    if (!raw) return '';
+    const paragraphs = raw.split(/\n\s*\n+/);
+    return paragraphs
+      .map((para) => {
+        const lines = para.split('\n').map((l) => l.trim()).filter(Boolean);
+        if (lines.length <= 1) return para.trim();
+
+        // If lines look like code, poetry, or a list, keep separate lines
+        const isListOrCode = lines.some((l) =>
+          /^([*•\-–—+]|\d+[.)]|#{1,6}\s|import\s|const\s|def\s|function\s|\/\/|[A-Z][\w\s]{1,30}:)/.test(l)
+        );
+        if (isListOrCode) {
+          return lines.join('\n');
+        }
+
+        // Check if first line is a title or section heading
+        const firstLine = lines[0];
+        const isHeadingLine = lines.length >= 2 && firstLine.length <= 60 && !/[.!?]$/.test(firstLine);
+
+        let headingPart = '';
+        const startIndex = isHeadingLine ? 1 : 0;
+        if (isHeadingLine) {
+          headingPart = firstLine + '\n\n';
+        }
+
+        let body = '';
+        for (let i = startIndex; i < lines.length; i++) {
+          const line = lines[i];
+          if (!body) {
+            body = line;
+          } else if (body.endsWith('-')) {
+            body = body.slice(0, -1) + line;
+          } else {
+            body += ' ' + line;
+          }
+        }
+
+        return (headingPart + body).trim();
+      })
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  /**
    * Clean up common OCR noise, notebook ruling artifacts, broken dashes, and handwriting quirks
    */
   private static cleanOcrText(raw: string): string {
     if (!raw) return '';
 
-    return raw
+    const cleaned = raw
       .replace(/\r\n/g, '\n')
       // Strip isolated notebook margin headers like "Date:", "Page No:", "Date :", etc.
       .replace(/^(Date|Page\s*No)[\s:_.-]*$/gim, '')
@@ -432,10 +474,14 @@ export class FileExtractorService {
       .replace(/\bGenerative\s+AIL\b/g, 'Generative AI')
       // Fix broken hyphenated words at line breaks (e.g., "infor- \n mation" -> "information")
       .replace(/(\w+)-\s*\n\s*(\w+)/g, '$1$2')
+      // Remove accidental stray quotes at line beginnings
+      .replace(/^["'“”‘]\s*(and|or|to|for|with|of|in|that|this)\b/gim, '$1')
       // Collapse multiple spaces & excessive blank lines
       .replace(/[ \t]+/g, ' ')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
+
+    return this.unwrapParagraphLines(cleaned);
   }
 
   /**
@@ -444,13 +490,12 @@ export class FileExtractorService {
   private static async extractCode(file: File, ext: string): Promise<ExtractedFileResult> {
     const text = await file.text();
     const langName = CODE_EXTENSIONS[ext] || ext.toUpperCase();
-    const formattedContent = `// Source File: ${file.name} (${langName})\n\n${text}`;
     const wordCount = text.split(/\s+/).filter(Boolean).length;
 
     return {
       fileName: file.name,
       fileType: 'code',
-      content: formattedContent,
+      content: text,
       wordCount,
       sourceDescription: `${langName} Source Code (${file.name})`,
     };

@@ -7,6 +7,7 @@
  */
 
 import { Message } from '../types';
+import { splitIntoSentences, cleanDocumentArtifacts } from '../utils/tokenEstimator';
 
 export interface AnswerResult {
   answer: string;
@@ -618,10 +619,8 @@ export class LocalQAService {
   }
 
   private extractSentences(text: string): string[] {
-    return text
-      .split(/(?<=[.!?])\s+|\n{2,}/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 15);
+    const cleaned = cleanDocumentArtifacts(text);
+    return splitIntoSentences(cleaned).filter((s) => s.trim().length > 15);
   }
 
   private tokenizeWords(text: string): string[] {

@@ -793,6 +793,22 @@ export const MainChatWorkspace: React.FC<MainChatWorkspaceProps> = ({
                   <button
                     type="button"
                     disabled={isProcessing}
+                    onClick={() => handleQuickAction('detailed', 'More Detailed')}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    📑 Detailed
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={() => handleQuickAction('terms', 'Key Terms')}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    🔍 Key Terms
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isProcessing}
                     onClick={() => {
                       setActiveTab('paragraph');
                       onConvertToParagraph();
